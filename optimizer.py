@@ -45,8 +45,8 @@ class Optimizer:
 
         # save stats and prompts
         avg_score, max_score = self.pop.stats
-        logger.info(f"Iteration {i} average score: {avg_score}, max score: {max_score}\n")
-        self.pop.dump(f"{os.getenv('RUN_FOLDER')}/prompts_{i}.jsonl")
+        logger.info(f"Iteration {i} average score: {avg_score}, max score: {max_score}")
+        self.pop.dump()
 
         # generate new prompts based on the best ones
         best_str = [str(p) for p in best]
@@ -72,7 +72,7 @@ class Optimizer:
         logger.info("Starting final eval")
         by_gen = self.pop.evaluate_iterations(self.test)
         logger.info("Final eval done")
-        self.pop.dump(f"{os.getenv('RUN_FOLDER')}/prompts_final.jsonl")
+        self.pop.dump()
 
         x = list(range(len(by_gen)))
         y_avg = [sum(g)/len(g) for g in by_gen]

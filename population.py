@@ -1,6 +1,7 @@
 import dspy
 from prompt import Prompt
 import json
+import os
 
 class Population:
     def __init__(self, prompts: list[Prompt], solve: dspy.Module) -> None:
@@ -31,8 +32,8 @@ class Population:
     def stats(self) -> tuple[float, float]:
         return self.avg_score, self.max_score
 
-    def dump(self, path: str):
-        with open(path, "w", encoding="utf-8") as f:
+    def dump(self):
+        with open(f"{os.getenv('RUN_FOLDER')}/prompts.jsonl", "w", encoding="utf-8") as f:
             for prompt in self.prompts:
                 json.dump(prompt.jsoned(), f)
                 f.write("\n")
