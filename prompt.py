@@ -75,4 +75,4 @@ class Prompt:
         return {"gen": self.gen, "prompt": str(self), "dev_score": self.__dev_score, "test_score": self.__test_score}
     
     def score_to_count(self) -> int:
-        return round(self.__dev_score*10) + 1
+        return round(self.__dev_score*10 + 3)

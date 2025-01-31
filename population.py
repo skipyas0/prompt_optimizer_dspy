@@ -30,7 +30,7 @@ class Population:
         return self.prompts[:n] if self.ranked else self.sorted(data)[:n]
 
     def select(self, n: int, data: list[dspy.Example]) -> list[Prompt]:
-        if self.ranked:
+        if not self.ranked:
             self.sorted(data)
         counts = [p.score_to_count() for p in self.prompts]
         return random.sample(self.prompts, n, counts=counts)
