@@ -23,7 +23,7 @@ class Prompt:
         """
         Valid prompts do not have additional formatting brackets.
         """
-        valid = len(re.findall("{.*?}", str(self.text))) == 1 and '{}' in self.text    
+        valid = len(re.findall("{.*?}", str(self.text))) == 1 and '{}' in self.text and len(re.findall("{[^}]|[^{]}", str(self.text))) == 0 
         if not valid:
             logger.warning(f"Prompt '{self.text}' is invalid")
         return valid
