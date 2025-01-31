@@ -42,11 +42,6 @@ def load_gsm8k_server():
     ds = map(examplify, ds)
     return list(ds)
 
-def dump_prompts(prompts_and_scores: list[tuple[str, int]], path: str):
-    with open(path, "w", encoding="utf-8") as f:
-        for prompt, score in prompts_and_scores:
-            json.dump({"prompt": prompt, "score": score}, f)
-            f.write("\n")
 
 def format_examples(examples: list[Example]) -> str:
     TEMPLATE = "Question: {q}\nAnswer: {a}"

@@ -2,7 +2,7 @@ import dspy
 
 class InstructionInductor(dspy.Signature):
     """
-    Given several input/output examples, design a suitable prompt for a Large Language Model for that task.
+    Given several input/output examples, design a suitable zero-shot prompt for a Large Language Model for that task.
     """
     examples: str = dspy.InputField()
     prefix_prompt: str = dspy.OutputField()
