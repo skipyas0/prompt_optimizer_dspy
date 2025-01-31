@@ -13,7 +13,7 @@ N_SOLUTIONS = 1
 
 POP_SIZE = 5
 TOP_N = 3
-ITER = 100
+ITER = 3#100
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -24,12 +24,34 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 class Optimizer:
-    def __init__(self, data: list[dspy.Example]):
+    def __init__(self, data: list[dspy.Example], optim_lm: dspy.LM, solve_lm: dspy.LM):
         ss = len(data) // 3
         self.train, self.dev, self.test = data[:ss], data[ss:2*ss], data[2*ss:]
-        self.induce = dspy.ChainOfThought(signature=signatures.InstructionInductor, temperature=CREATIVE_TEMP, n=POP_SIZE)
-        self.iterate = dspy.ChainOfThought(signature=signatures.OptimizerIterator, temperature=CREATIVE_TEMP, n=POP_SIZE)
-        self.solve = dspy.ChainOfThought("question: str -> answer: float", temperature=SOLVE_TEMP, n=N_SOLUTIONS)
+        logger.info(f"Split lengths: train {len(self.train)}, dev {len(self.dev)}, test {len(self.test)}")
+        logger.info("Optimizer model" + optim_lm.model)
+        logger.info("Solver model" + solve_lm.model)
+        induce_module = dspy.ChainOfThought(signature=signatures.InstructionInductor, temperature=CREATIVE_TEMP, n=POP_SIZE)
+        iterate_module = dspy.ChainOfThought(signature=signatures.OptimizerIterator, temperature=CREATIVE_TEMP, n=POP_SIZE)
+        solve_module = dspy.ChainOfThought("question: str -> answer: float", temperature=SOLVE_TEMP, n=N_SOLUTIONS)
+
+        def induce(examples):
+            with dspy.context(lm=optim_lm):
+                ret = induce_module(examples=examples)
+            return ret
+        self.induce = induce
+        
+        def iterate(old_prompts):
+            with dspy.context(lm=optim_lm):
+                ret = iterate_module(old_prompts=old_prompts)
+            return ret
+        self.iterate = iterate
+
+        def solve(question):
+            with dspy.context(lm=solve_lm):
+                ret = solve_module(question=question)
+            return ret
+        self.solve = solve
+
         self.pop = Population([], self.solve)
 
     def __induce(self, examples: str) -> list[str]:

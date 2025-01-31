@@ -4,7 +4,7 @@ import json
 import os
 
 class Population:
-    def __init__(self, prompts: list[Prompt], solve: dspy.Module) -> None:
+    def __init__(self, prompts: list[Prompt], solve) -> None:
         self.prompts: list[Prompt] = prompts
         self.avg_score, self.max_score = -1.0, -1.0
         self.ranked = False
