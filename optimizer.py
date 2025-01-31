@@ -13,7 +13,7 @@ N_SOLUTIONS = 1
 
 POP_SIZE = 5
 TOP_N = 3
-ITER = 3#100
+ITER = 100
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -63,7 +63,7 @@ class Optimizer:
 
     def __step(self, i: int):
         logger.info(f"Starting iteration {i}")
-        best = self.pop.top_n(TOP_N, self.dev)
+        best = self.pop.select(TOP_N, self.dev)
 
         # save stats and prompts
         avg_score, max_score = self.pop.stats

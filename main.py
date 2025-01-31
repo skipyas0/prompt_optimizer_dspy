@@ -19,7 +19,7 @@ if __name__ == "__main__":
     vllm_port = os.getenv("VLLM_MY_PORT")
     if vllm_port:
         # self hosted model on cluster
-        solve_lm = dspy.LM("hosted_vllm/CohereForAI/aya-expanse-8b", api_base=f"http://localhost:{port}/v1", api_key="EMPTY", cache=False)
+        solve_lm = dspy.LM("hosted_vllm/CohereForAI/aya-expanse-8b", api_base=f"http://localhost:{vllm_port}/v1", api_key="EMPTY", cache=False)
     else:
         # use same as optim
         solve_lm = optim_lm

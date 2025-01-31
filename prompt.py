@@ -15,8 +15,9 @@ class Prompt:
     def __init__(self, text: str, gen: int):
         self.text = text
         self.gen = gen
-        self.__dev_score = -1.0 if self.__valid() else 0.0
-        self.__test_score = -1.0 if self.__valid() else 0.0
+        valid = self.__valid()
+        self.__dev_score = -1.0 if valid else 0.0
+        self.__test_score = -1.0 if valid else 0.0
 
     def __valid(self) -> bool:
         """
@@ -34,10 +35,18 @@ class Prompt:
         return self.text.format(s)
 
     def score(self, batch: list[dspy.Example], solve: dspy.Module, final: bool = False) -> float:
-        if self.__dev_score >= 0.0 and not final:
-            return self.__dev_score
-        
-        split_name = "TEST" if final else "DEV"
+        if final:
+            gs = lambda: self.__test_score
+            def ss(x): self.__test_score = x
+            split_name = "TEST"
+        else: 
+            gs = lambda: self.__dev_score
+            def ss(x): self.__dev_score = x
+            split_name = "DEV"
+
+        if gs() >= 0.0:
+            return gs()
+            
         batch_score = 0.0
         for i, example in enumerate(batch):
             question = self.format(example.question)
@@ -47,7 +56,7 @@ class Prompt:
             N_SOLUTIONS = len(solutions.answer)
             logger.debug(f"Grading problem {i+1} on split {split_name}")
             for comp_idx in range(N_SOLUTIONS):
-                reasoning = solutions.reasoning[comp_idx]
+                rationale = solutions.rationale[comp_idx]
                 solution = solutions.answer[comp_idx]
                 try:
                     solution = float(solution)
@@ -56,15 +65,14 @@ class Prompt:
                     logger.warning(f"Couldn't convert '{solution}' to float")
                     grade = 0.0
                 avg_score_on_sample += grade
-                logger.debug(f"Completion {comp_idx+1}\nReasoning:{reasoning}\nSolution:{solution}\t|\tGold:{example}\nPass:{grade}\n")
+                logger.debug(f"Completion {comp_idx+1}\nRationale:{rationale}\nSolution:{solution}\t|\tGold:{example}\nPass:{grade}\n")
             batch_score += avg_score_on_sample / N_SOLUTIONS
 
-        if final:
-            self.__test_score = batch_score / len(batch)
-            return self.__test_score
-        else:
-            self.__dev_score = batch_score / len(batch)
-            return self.__dev_score
+        ss(batch_score / len(batch))
+        return gs()
         
     def jsoned(self) -> dict:
         return {"gen": self.gen, "prompt": str(self), "dev_score": self.__dev_score, "test_score": self.__test_score}
+    
+    def score_to_count(self) -> int:
+        return round(self.__dev_score*10) + 1

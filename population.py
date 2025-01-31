@@ -2,6 +2,7 @@ import dspy
 from prompt import Prompt
 import json
 import os
+import random
 
 class Population:
     def __init__(self, prompts: list[Prompt], solve) -> None:
@@ -27,6 +28,12 @@ class Population:
     
     def top_n(self, n: int, data: list[dspy.Example]) -> list[Prompt]:
         return self.prompts[:n] if self.ranked else self.sorted(data)[:n]
+
+    def select(self, n: int, data: list[dspy.Example]) -> list[Prompt]:
+        if self.ranked:
+            self.sorted(data)
+        counts = [p.score_to_count() for p in self.prompts]
+        return random.sample(self.prompts, n, counts=counts)
 
     @property
     def stats(self) -> tuple[float, float]:
