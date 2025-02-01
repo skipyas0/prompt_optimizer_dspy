@@ -26,8 +26,8 @@ class Prompt:
         Sanitize prompt and return if it's valid
         Valid prompts do not have additional formatting brackets.
         """
-        sanitized = re.sub("{.*?}", '{}', self.text).replace('\"', '')
-        brackets_left = len(re.findall("{.*?}", str(self.text)))
+        sanitized = re.sub("{.*?}", '{}', self.text)
+        brackets_left = len(re.findall("{.*?}", str(sanitized)))
         if brackets_left == 1:
             self.text = sanitized
             valid = True
@@ -36,7 +36,7 @@ class Prompt:
             valid = True
         else:
             valid = False 
-
+        self.text = self.text.replace('\"', '')
         valid = valid and len(re.findall("{[^}]|[^{]}", str(self.text))) == 0 
         if not valid:
             logger.warning(f"Prompt '{self.text}' is invalid")
@@ -64,23 +64,25 @@ class Prompt:
         batch_score = 0.0
         for i, example in enumerate(batch):
             question = self.format(example.question)
-            solutions = solve(question=question).completions
-            example = float(example.answer)
-            avg_score_on_sample = 0.0
-            N_SOLUTIONS = len(solutions.answer)
-            logger.debug(f"Grading problem {i+1} on split {split_name}")
-            for comp_idx in range(N_SOLUTIONS):
-                rationale = solutions.rationale[comp_idx]
-                solution = solutions.answer[comp_idx]
-                try:
-                    solution = float(solution)
-                    grade = 1.0 if solution==example else 0.0
-                except ValueError:
-                    logger.warning(f"Couldn't convert '{solution}' to float")
-                    grade = 0.0
-                avg_score_on_sample += grade
-                logger.debug(f"Completion {comp_idx+1}\nRationale:{rationale}\nSolution:{solution}\t|\tGold:{example}\nPass:{grade}\n")
-            batch_score += avg_score_on_sample / N_SOLUTIONS
+            response = solve(question=question)
+            if response:
+                solutions = response.completions
+                example = float(example.answer)
+                avg_score_on_sample = 0.0
+                N_SOLUTIONS = len(solutions.answer)
+                logger.debug(f"Grading problem {i+1} on split {split_name}")
+                for comp_idx in range(N_SOLUTIONS):
+                    rationale = solutions.rationale[comp_idx]
+                    solution = solutions.answer[comp_idx]
+                    try:
+                        solution = float(solution)
+                        grade = 1.0 if solution==example else 0.0
+                    except ValueError:
+                        logger.warning(f"Couldn't convert '{solution}' to float")
+                        grade = 0.0
+                    avg_score_on_sample += grade
+                    logger.debug(f"Completion {comp_idx+1}\nRationale:{rationale}\nSolution:{solution}\t|\tGold:{example}\nPass:{grade}\n")
+                batch_score += avg_score_on_sample / N_SOLUTIONS
 
         ss(batch_score / len(batch))
         return gs()

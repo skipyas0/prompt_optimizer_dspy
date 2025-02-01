@@ -11,7 +11,6 @@ class InstructionInductor(dspy.Signature):
 class OptimizerIterator(dspy.Signature):
     """
     Given several prompts and their respective scores, propose new prompt.
-    Make sure you keep the formatting brackets '{}' in your answer.
     """
     old_prompts: list[tuple[str,float]] = dspy.InputField()
     prompt_proposal: str = dspy.OutputField()

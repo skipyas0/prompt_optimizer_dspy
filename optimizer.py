@@ -11,9 +11,9 @@ CREATIVE_TEMP = 0.9
 SOLVE_TEMP = 0.0
 N_SOLUTIONS = 1
 
-POP_SIZE = 4
-TOP_N = 4
-ITER = 12
+POP_SIZE = 15
+TOP_N = 5
+ITER = 25
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -40,8 +40,8 @@ class Optimizer:
                 with dspy.context(lm=optim_lm):
                     ret = induce_module(examples=examples)
                 return ret
-            except ValueError:
-                logger.error("Model/COT error on induce, repeating")
+            except ValueError as e:
+                logger.error(f"Model/COT error '{str(e)}' on induce, repeating")
                 return induce(examples)
         self.induce = induce
         
@@ -50,8 +50,8 @@ class Optimizer:
                 with dspy.context(lm=optim_lm):
                     ret = iterate_module(old_prompts=old_prompts)
                 return ret
-            except ValueError:
-                logger.error("Model/COT error on iterate, repeating")
+            except ValueError as e:
+                logger.error(f"Model/COT error '{str(e)}' on iterate, repeating")
                 return iterate(old_prompts)
             
         self.iterate = iterate
@@ -61,10 +61,10 @@ class Optimizer:
                 with dspy.context(lm=solve_lm):
                     ret = solve_module(question=question)
                 return ret
-            except ValueError:
-                logger.error("Model/COT error on solve, repeating")
-                return solve(question)
-
+            except ValueError as e:
+                logger.error(f"Model/COT error '{str(e)}' on solve, aborting solve")
+                return None
+            
         self.solve = solve
 
         self.pop = Population([], self.solve)

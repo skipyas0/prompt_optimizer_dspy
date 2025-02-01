@@ -14,15 +14,16 @@ if __name__ == "__main__":
 
     load_dotenv()
     api_key = os.getenv("API_KEY")
-    optim_lm = dspy.LM("gpt-4o-mini", api_key=api_key, cache=False)
-
+    
     vllm_port = os.getenv("VLLM_MY_PORT")
     if vllm_port:
         # self hosted model on cluster
-        solve_lm = dspy.LM("hosted_vllm/CohereForAI/aya-expanse-8b", api_base=f"http://localhost:{vllm_port}/v1", api_key="EMPTY", cache=False)
+        solve_lm = dspy.LM("hosted_vllm/ibnzterrell/Nvidia-Llama-3.1-Nemotron-70B-Instruct-HF-AWQ-INT4", api_base=f"http://localhost:{vllm_port}/v1", api_key="EMPTY", cache=False)
+        optim_lm = dspy.LM("hosted_vllm/ibnzterrell/Nvidia-Llama-3.1-Nemotron-70B-Instruct-HF-AWQ-INT4", api_base=f"http://localhost:{vllm_port}/v1", api_key="EMPTY", cache=False)
     else:
+        solve_lm = dspy.LM("gpt-4o-mini", api_key=api_key, cache=False)
         # use same as optim
-        solve_lm = optim_lm
+        optim_lm = solve_lm
         # or define new one
         #solve_lm = dspy.LM("gpt-4o-mini", api_key=api_key, cache=False)
 
