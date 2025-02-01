@@ -11,9 +11,9 @@ CREATIVE_TEMP = 0.9
 SOLVE_TEMP = 0.0
 N_SOLUTIONS = 1
 
-POP_SIZE = 5
-TOP_N = 3
-ITER = 100
+POP_SIZE = 4
+TOP_N = 4
+ITER = 12
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -25,31 +25,46 @@ logger.addHandler(handler)
 
 class Optimizer:
     def __init__(self, data: list[dspy.Example], optim_lm: dspy.LM, solve_lm: dspy.LM):
+        logger.info(f"Settings: {POP_SIZE=}, {TOP_N=}, {ITER=}, {N_SOLUTIONS=},{CREATIVE_TEMP=}, {SOLVE_TEMP=}")
         ss = len(data) // 3
         self.train, self.dev, self.test = data[:ss], data[ss:2*ss], data[2*ss:]
         logger.info(f"Split lengths: train {len(self.train)}, dev {len(self.dev)}, test {len(self.test)}")
-        logger.info("Optimizer model" + optim_lm.model)
-        logger.info("Solver model" + solve_lm.model)
+        logger.info("Optimizer model " + optim_lm.model)
+        logger.info("Solver model " + solve_lm.model)
         induce_module = dspy.ChainOfThought(signature=signatures.InstructionInductor, temperature=CREATIVE_TEMP, n=POP_SIZE)
         iterate_module = dspy.ChainOfThought(signature=signatures.OptimizerIterator, temperature=CREATIVE_TEMP, n=POP_SIZE)
         solve_module = dspy.ChainOfThought("question: str -> answer: float", temperature=SOLVE_TEMP, n=N_SOLUTIONS)
 
         def induce(examples):
-            with dspy.context(lm=optim_lm):
-                ret = induce_module(examples=examples)
-            return ret
+            try:
+                with dspy.context(lm=optim_lm):
+                    ret = induce_module(examples=examples)
+                return ret
+            except ValueError:
+                logger.error("Model/COT error on induce, repeating")
+                return induce(examples)
         self.induce = induce
         
         def iterate(old_prompts):
-            with dspy.context(lm=optim_lm):
-                ret = iterate_module(old_prompts=old_prompts)
-            return ret
+            try:
+                with dspy.context(lm=optim_lm):
+                    ret = iterate_module(old_prompts=old_prompts)
+                return ret
+            except ValueError:
+                logger.error("Model/COT error on iterate, repeating")
+                return iterate(old_prompts)
+            
         self.iterate = iterate
 
         def solve(question):
-            with dspy.context(lm=solve_lm):
-                ret = solve_module(question=question)
-            return ret
+            try:
+                with dspy.context(lm=solve_lm):
+                    ret = solve_module(question=question)
+                return ret
+            except ValueError:
+                logger.error("Model/COT error on solve, repeating")
+                return solve(question)
+
         self.solve = solve
 
         self.pop = Population([], self.solve)
@@ -57,7 +72,7 @@ class Optimizer:
     def __induce(self, examples: str) -> list[str]:
         logger.info("Starting instruction induction")
         completions = self.induce(examples=examples).completions
-        pop = list(map(lambda s: Prompt(s[0]+'{}'+s[1],0), zip(completions.prefix_prompt, completions.suffix_prompt)))
+        pop = list(map(lambda s: Prompt(s[0], s[1],0), zip(completions.prefix_prompt, completions.suffix_prompt)))
         logger.info("Instruction Induction complete")
         return pop
 
@@ -68,12 +83,13 @@ class Optimizer:
         # save stats and prompts
         avg_score, max_score = self.pop.stats
         logger.info(f"Iteration {i} average score: {avg_score}, max score: {max_score}")
-        self.pop.dump()
 
         # generate new prompts based on the best ones
-        best_str = [str(p) for p in best]
-        new = [Prompt(text, i) for text in self.iterate(old_prompts=best_str).completions.prompt_proposal]
+        best_str = [p.prompt_and_perf() for p in best]
+        logger.info("Generating new prompts from:\n"+'\n'.join([f"Prompt: {p[0]}, score: {p[1]}" for p in best_str]))
+        new = [Prompt(text, "", i) for text in self.iterate(old_prompts=best_str).completions.prompt_proposal]
         self.pop.add(new)
+        self.pop.dump()
 
     def __run(self):
         for i in range(1,ITER+1):
@@ -85,6 +101,7 @@ class Optimizer:
             self.pop.add(self.__induce(text_examples))
         else:
             self.pop.add(initial_population)
+        self.pop.dump()
 
         logger.info("Starting optimization")
         self.__run()

@@ -12,8 +12,10 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 class Prompt:
-    def __init__(self, text: str, gen: int):
-        self.text = text
+    def __init__(self, prefix: str, suffix: str, gen: int):
+        self.prefix = prefix
+        self.suffix = suffix
+        self.text = prefix + suffix
         self.gen = gen
         valid = self.__valid()
         self.__dev_score = -1.0 if valid else 0.0
@@ -21,9 +23,21 @@ class Prompt:
 
     def __valid(self) -> bool:
         """
+        Sanitize prompt and return if it's valid
         Valid prompts do not have additional formatting brackets.
         """
-        valid = len(re.findall("{.*?}", str(self.text))) == 1 and '{}' in self.text and len(re.findall("{[^}]|[^{]}", str(self.text))) == 0 
+        sanitized = re.sub("{.*?}", '{}', self.text).replace('\"', '')
+        brackets_left = len(re.findall("{.*?}", str(self.text)))
+        if brackets_left == 1:
+            self.text = sanitized
+            valid = True
+        elif brackets_left == 0:
+            self.text = self.prefix+'{}'+self.suffix
+            valid = True
+        else:
+            valid = False 
+
+        valid = valid and len(re.findall("{[^}]|[^{]}", str(self.text))) == 0 
         if not valid:
             logger.warning(f"Prompt '{self.text}' is invalid")
         return valid
@@ -76,3 +90,6 @@ class Prompt:
     
     def score_to_count(self) -> int:
         return round(self.__dev_score*10 + 3)
+    
+    def prompt_and_perf(self):
+        return (self.text, self.__dev_score)
