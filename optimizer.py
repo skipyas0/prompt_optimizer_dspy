@@ -13,7 +13,7 @@ N_SOLUTIONS = 1
 
 POP_SIZE = 15
 TOP_N = 5
-ITER = 25
+ITER = 0#10
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -31,6 +31,7 @@ class Optimizer:
         logger.info(f"Split lengths: train {len(self.train)}, dev {len(self.dev)}, test {len(self.test)}")
         logger.info("Optimizer model " + optim_lm.model)
         logger.info("Solver model " + solve_lm.model)
+        self.start_gen = 1
         induce_module = dspy.ChainOfThought(signature=signatures.InstructionInductor, temperature=CREATIVE_TEMP, n=POP_SIZE)
         iterate_module = dspy.ChainOfThought(signature=signatures.OptimizerIterator, temperature=CREATIVE_TEMP, n=POP_SIZE)
         solve_module = dspy.ChainOfThought("question: str -> answer: float", temperature=SOLVE_TEMP, n=N_SOLUTIONS)
@@ -92,7 +93,7 @@ class Optimizer:
         self.pop.dump()
 
     def __run(self):
-        for i in range(1,ITER+1):
+        for i in range(self.start_gen,self.start_gen+ITER+1):
             self.__step(i)
 
     def begin(self, initial_population: list[Prompt]=[]):
@@ -101,6 +102,7 @@ class Optimizer:
             self.pop.add(self.__induce(text_examples))
         else:
             self.pop.add(initial_population)
+            self.start_gen = max([p.gen for p in self.pop])
         self.pop.dump()
 
         logger.info("Starting optimization")

@@ -90,6 +90,13 @@ class Prompt:
     def jsoned(self) -> dict:
         return {"gen": self.gen, "prompt": str(self), "dev_score": self.__dev_score, "test_score": self.__test_score}
     
+    @classmethod
+    def from_json(cls, prompt: dict):
+        p = Prompt(prompt["prompt"], "", prompt["gen"])
+        p.__dev_score = prompt["dev_score"]
+        p.__test_score = prompt["test_score"]
+        return p
+
     def score_to_count(self) -> int:
         return round(self.__dev_score*10 + 3)
     

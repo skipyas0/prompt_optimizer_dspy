@@ -1,11 +1,21 @@
+import json
+
 if __name__ == "__main__":
     # env setup
     import os
     import time
-    stamp = round(time.time() % 31536000)
+    stamp = 3953075#round(time.time() % 31536000)
     folder = f"runs/{stamp}"
-    os.environ["RUN_FOLDER"] = folder
-    os.mkdir(folder)
+    os.environ['RUN_FOLDER'] = folder
+    
+    from prompt import Prompt   
+    if os.path.exists(folder):
+        with open(folder+'/prompts.jsonl', 'r') as f:
+            prompts = [json.loads(l) for l in f.readlines()]
+            initial_population = [Prompt.from_json(p) for p in prompts]
+    else:
+        initial_population = []
+        os.mkdir(folder)
 
     import dspy
     from dotenv import load_dotenv
@@ -29,6 +39,6 @@ if __name__ == "__main__":
 
     ds = utils.load_data("seq.json")
     optim = Optimizer(ds, optim_lm, solve_lm)
-    optim.begin()
+    optim.begin(initial_population)
     optim.eval()
     
