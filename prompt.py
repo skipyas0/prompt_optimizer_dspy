@@ -12,15 +12,15 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 class Prompt:
-    def __init__(self, prefix: str, suffix: str = "", gen: int = 0, origin: str = "unknown"):
+    def __init__(self, prefix: str, suffix: str = "", gen: int = 0, origin: str = "unknown", active: bool = True):
         self.prefix = prefix
         self.suffix = suffix
         self.text = prefix + suffix
         self.gen = gen
         self.origin = origin
-        valid = self.__valid()
-        self.__dev_score = -1.0 if valid else 0.0
-        self.__test_score = -1.0 if valid else 0.0
+        self.valid = self.__valid()
+        self.__dev_score = -1.0 if self.valid else 0.0
+        self.__test_score = -1.0 if self.valid else 0.0
         self.completions = []
         self.active = True
 
@@ -52,6 +52,8 @@ class Prompt:
         return self.text.format(s)
     
     def get_completion(self, grade: Literal[0, 1]):
+        if len(self.completions) == 0:
+            return None
         try:
             # get a wrong completion
             completion = next(filter(lambda c: c[2] == grade, self.completions))
@@ -65,7 +67,7 @@ class Prompt:
     
     @classmethod
     def from_json(cls, prompt: dict):
-        p = Prompt(prompt["prompt"], "", prompt["gen"])
+        p = Prompt(prompt["prompt"], "", prompt["gen"], prompt["origin"], prompt["active"])
         p.__dev_score = prompt["dev_score"]
         p.__test_score = prompt["test_score"]
         return p

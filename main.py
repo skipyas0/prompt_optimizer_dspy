@@ -1,29 +1,27 @@
-import json
 import os
 import time
+import dspy
+
 if __name__ == "__main__":
     # env setup
+    stamp = "experiment-reflective"#round(time.time() % 31536000)
+    folder = f"runs/{stamp}"
+
     os.environ["OPTIM_LM"] = "gpt-4o"
     os.environ["SOLVE_LM"] = "gpt-4o-mini"
-    stamp = round(time.time() % 31536000)
-    folder = f"runs/{stamp}"
+    os.environ["OPTIM_OP"] = "REFLECTIVE"
     os.environ['RUN_FOLDER'] = folder
     
-    from prompt import Prompt   
-    if os.path.exists(folder):
-        with open(folder+'/all_prompts.jsonl', 'r') as f:
-            prompts = [json.loads(l) for l in f.readlines()]
-            initial_population = [Prompt.from_json(p) for p in prompts]
-    else:
-        initial_population = []
-        os.mkdir(folder)
-
     import utils
+    initial_population = utils.check_and_load_population(folder)
+
     from optimizer import Optimizer
     from data import Data
-    
-    optim_lm = utils.get_lm(os.environ["OPTIM_LM"])
-    data = Data.from_json("seq.json")
+
+    optim_lm = utils.get_lm("OPTIM")
+    dspy.configure(lm=optim_lm)
+
+    data = Data.from_json("sequence_bench_quad_alt_rec_mod.json")
     optim = Optimizer(data)
     optim.begin(initial_population)
     optim.eval()

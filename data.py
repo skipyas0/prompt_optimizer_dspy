@@ -1,10 +1,11 @@
 import dspy
 import json
-from typing import Literal
+from typing import Literal, Optional
 import os
 from prompt import Prompt
 import logging
 import utils
+import random
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -29,12 +30,19 @@ class Data:
     def length(self, split: Literal["all", "train", "dev", "test"] = "all"):
         return len(self.data) if split == "all" else len(self.__getattribute__(split))
     
+    def select(self, split: Literal["train", "dev", "test"], n: int) -> list[dspy.Example]:
+        assert split in ["train", "dev", "test"]
+        data = self.__getattribute__(split)
+        if n < len(data):
+            return random.sample(data, n)
+        return data
+    
     def __get_splits(self):
         ss = len(self.data) // 3
         return self.data[:ss], self.data[ss:2*ss], self.data[2*ss:]
 
     def __get_solve_handle(self):
-        solve_lm = utils.get_lm(os.environ["SOLVE_LM"])
+        solve_lm = utils.get_lm("SOLVE")
         
         solve_module = dspy.ChainOfThought("question: str -> answer: float", temperature=SOLVE_TEMP)
             
@@ -65,11 +73,18 @@ class Data:
         example_strings = [TEMPLATE.format(q=e.question, a=e.answer) for e in self.data]
         return "\n".join(example_strings)
 
-    def eval_on_split(self, prompt: Prompt, split: Literal["train", "dev", "test"] = "dev"):
-        data: list[dspy.Example] = self.__getattribute__(split) if split in ["train", "dev", "test"] else None
+    def eval_on_split(self, 
+                      prompt: Prompt, 
+                      split: Literal["train", "dev", "test"] = "dev",
+                      batch_size: int = 5):
+        assert split in ["train", "dev", "test"]
+        data: list[dspy.Example] = self.__getattribute__(split) 
         if data == None:
             raise ValueError(f"Wrong split name {split}")
         
+        if batch_size > 0 and len(data) > batch_size:
+            data = random.sample(data, batch_size)
+
         def get_reasoning(completions, idx):
             if hasattr(completions, "rationale"):
                 return completions.rationale[idx]
@@ -82,7 +97,11 @@ class Data:
         if old_score > -1.0:
             logger.warning(f"Tried grading prompt {prompt.text} with assigned score {old_score}.")
             return old_score
-        
+        if not prompt.valid:
+            logger.warning(f"Tried grading prompt {prompt.text} which is invalid.")
+            prompt.set_score(split, 0.0)
+            return 0.0
+
         batch_score = 0.0
         for i, example in enumerate(data):
             question = prompt.format(example.question)
@@ -104,9 +123,9 @@ class Data:
                         grade = 0.0
                     acc_score_on_sample += grade
                     logger.debug(f"Completion {comp_idx+1}\nRationale:{rationale}\nSolution:{solution}\t|\tGold:{gold}\nPass:{grade}\n")
-                self.completions.append((example, response.completions.reasoning[0], grade))
+                prompt.completions.append((example, response.completions.reasoning[0], grade))
                 avg_score_on_sample = acc_score_on_sample / N_SOLUTIONS
                 self.scores[split][i] = avg_score_on_sample
                 batch_score += avg_score_on_sample
-        prompt.set_score(split, batch_score / self.length(split))
+        prompt.set_score(split, batch_score / len(data))
         return prompt.get_score(split)

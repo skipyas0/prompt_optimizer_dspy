@@ -3,7 +3,6 @@ import dspy
 import logging
 import os
 from prompt import Prompt
-import utils
 from population import Population
 import matplotlib.pyplot as plt
 import random
@@ -15,8 +14,7 @@ CREATIVE_TEMP = 0.75
 N_SOLUTIONS = 1
 
 POP_SIZE = 20
-TOP_N = 5
-ITER = 0#10
+ITER = 10
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -28,12 +26,20 @@ logger.addHandler(handler)
 
 class Optimizer:
     def __init__(self, data: Data):
-        logger.info(f"Settings: {POP_SIZE=}, {TOP_N=}, {ITER=}, {N_SOLUTIONS=}")
+        logger.info(f"Settings: {POP_SIZE=}, {ITER=}, {N_SOLUTIONS=}")
         self.data = data
         logger.info(f"Split lengths: train {len(self.data.train)}, dev {len(self.data.dev)}, test {len(self.data.test)}")
         self.start_gen = 1
-        self.population = Population()
-        self.all_prompts = Population()
+        self.population = Population([])
+        self.all_prompts = Population([])
+
+        self.operators = {
+            "LAMARCKIAN": self.lamarckian,
+            "REFLECTIVE": self.reflective,
+            "ITERATIVE": self.iterative,
+            "CROSSOVER": self.crossover
+        }
+        self.op = self.operators[os.environ["OPTIM_OP"]]
 
     ### TOOLS FOR PROMPT GENERATION
     def lamarckian(self, hint: str = "", gen: int = 0, n: int = 1) -> None:
@@ -50,9 +56,10 @@ class Optimizer:
         Returns:
             None
         """
+        N_EXAMPLES = 5
         module = dspy.ChainOfThought(signature=signatures.Lamarckian, temperature=CREATIVE_TEMP)
         for _ in range(n):
-            prompt = module(examples=str(self.data.train), supervisor_hint=hint).prompt_proposal
+            prompt = module(examples=str(self.data.select('train', N_EXAMPLES)), supervisor_hint=hint).prompt_proposal
             prompt_obj = Prompt(prompt, origin="lamarckian", gen=gen)
             score = self.data.eval_on_split(prompt_obj) 
             self.population.add(prompt_obj)
@@ -79,17 +86,19 @@ class Optimizer:
         module = dspy.ChainOfThought(signature=signatures.Reflective, temperature=CREATIVE_TEMP)
         for _ in range(n):
             worst_quartile = self.population.quartile(4)
-            original = random.choice(worst_quartile) if len(worst_quartile) > 1 else self.population.prompts[0]
-            completion = original.get_completion(0)
+            completion = None
+            while not completion:
+                original = random.choice(self.population.prompts)
+                completion = original.get_completion(0)
+                logger.warning(f"Got completion {completion} in reflective, prompt {str(original)}")
             task = completion[0]
             reasoning = completion[1]
-            completion = module(prompt=original.text, task_question=task.question, task_gold_answer=task.answer, reasoning=reasoning, supervisor_hint=hint)
+            completion = module(original_prompt=original.text, task_question=task.question, reasoning=reasoning, supervisor_hint=hint)
             prompt = completion.prompt_proposal
-            critique = completion.prompt_critique
             prompt_obj = Prompt(prompt, origin="reflective", gen=gen)
             score = self.data.eval_on_split(prompt_obj) 
             self.population.add(prompt_obj)
-            logger.info(f"REFLECTIVE generated prompt:\n {str(prompt_obj)}\nSCORE: {score}.\nOriginal prompt:\n{original.text}\nCritique:\n{critique}\nTools:{self.population.tool_effectivity}")
+            logger.info(f"REFLECTIVE generated prompt:\n {str(prompt_obj)}\nSCORE: {score}.\nOriginal prompt:\n{original.text}\nTools:{self.population.tool_effectivity}")
             self.population.update_tool_effectivity("reflective", score)
     
     def iterative(self, hint: str = "", gen: int = 0, n: int = 1) -> None:
@@ -142,7 +151,7 @@ class Optimizer:
             prompt2 = sorted(self.population, key= lambda p: Levenshtein.distance(prompt1.text, p.text))[-1]
             prompts = [prompt1, prompt2]
             random.shuffle(prompts)
-            prompt = module(prompts=tuple(prompts), supervisor_hint=hint).prompt_proposal
+            prompt = module(prompt_a=prompts[0].prompt_and_perf(), prompt_b=prompts[1].prompt_and_perf(), supervisor_hint=hint).prompt_proposal
             prompt_obj = Prompt(prompt, origin="crossover", gen=gen)
             score = self.data.eval_on_split(prompt_obj) 
             self.population.add(prompt_obj)
@@ -152,28 +161,35 @@ class Optimizer:
     def __run(self):
         for step in range(self.start_gen+1,self.start_gen+ITER+1):
             self.all_prompts.set_update(self.population.prompts)
+            self.all_prompts.dump()
             n = self.population.purge_duplicates()
-            self.reflective(gen=step, n = n)
-            self.population.dump()
+            self.op(gen=step, n = n)
+            self.population.dump(gen=step)
 
     def begin(self, initial_population: list[Prompt]=[]):
         if len(initial_population) < 1:
             self.lamarckian(n = POP_SIZE)
+            self.all_prompts.set_update(self.population.prompts)
         else:
-            self.population.add(initial_population)
-            self.start_gen = max([p.gen for p in self.pop])
-        self.pop.dump()
+            self.all_prompts.set_update(initial_population)
+            active = [p for p in self.all_prompts if p.active]
+            # score prompts with uninitialized dev scores 
+            _ = [self.data.eval_on_split(p) for p in active if p.get_score("dev") == -1.0]
+            self.population.add(active)
+            self.start_gen = max([p.gen for p in self.population])
+        self.population.dump(gen=0)
+        self.all_prompts.dump()
 
         logger.info("Starting optimization")
         self.__run()
         logger.info("Optimization done")
-        all_prompts = Population(list(self.all_prompts))
-        all_prompts.dump()
+        self.all_prompts.dump()
 
     def eval(self):
         logger.info("Starting final eval")
-        by_gen = self.pop.evaluate_iterations(self.test)
+        by_gen = self.all_prompts.evaluate_iterations(self.data)
         logger.info("Final eval done")
+        self.all_prompts.dump()
 
         x = list(range(len(by_gen)))
         y_avg = [sum(g)/len(g) for g in by_gen]

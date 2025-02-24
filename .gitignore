@@ -6,3 +6,4 @@ runs
 slurm
 *.ipynb
 archive
+datasets

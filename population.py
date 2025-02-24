@@ -84,16 +84,8 @@ class Population:
         max_gen = max([p.gen for p in self.prompts])
         return [list(filter(lambda p: p.gen == i, self.prompts)) for i in range(max_gen+1)]
     
-    def evaluate_iterations(self, data: Data, top_n: int = -1) -> list[list[float]]:
-        generations = self.filter_by_iteration()
-        scores_by_gen = []
-        for gen in generations:
-            gen_scores = []
-            gen = gen if top_n == -1 else gen[:top_n]
-            for prompt in gen:
-                score = prompt.score(data, self.solve, final=True)
-                gen_scores.append(score)
-            scores_by_gen.append(gen_scores)
+    def evaluate_iterations(self, data: Data) -> list[list[float]]:
+        scores_by_gen = [[data.eval_on_split(prompt, 'test', batch_size=-1) for prompt in gen] for gen in self.filter_by_iteration()]
         return scores_by_gen
     
     def quartile(self, i: int) -> list[Prompt]:
@@ -113,13 +105,11 @@ class Population:
         Returns:
             int: How many were purged
         """
-        self.population.dump()
         purged = len(self)//4
         for i in range(purged):
             logger.info(f"PURGE WORST ({i}): {self.prompts[-1].text}")
-            self.population.prompts[-1].active = False
-            self.population.prompts.pop()
-        self.population.current_gen += 1
+            self.prompts[-1].active = False
+            self.prompts.pop()
         return purged
 
     def purge_duplicates(self) -> int:
@@ -133,14 +123,13 @@ class Population:
         Returns:
             int: How many were purged
         """
-        self.population.dump()
+        self.dump()
         purged = len(self)//4
         for i in range(purged):
-            curr = self.population[i]
+            curr = self[i]
             most_similar = sorted(self.prompts[i+1:], key=lambda p: Levenshtein.distance(curr.text, p.text))[0]
             most_similar.active = False
-            most_similar_ix = self.population.prompts.index(most_similar)
-            self.population.prompts.pop(most_similar_ix)
+            most_similar_ix = self.prompts.index(most_similar)
+            self.prompts.pop(most_similar_ix)
             logger.info(f"PURGE DUPLICATES ({i}): {most_similar.text}")
-        self.population.current_gen += 1
         return purged
