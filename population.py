@@ -30,9 +30,12 @@ class Population:
             "reflective": (0,0.0),
             "iterative": (0,0.0),
             "crossover": (0,0.0),
+            "mutation": (0,0.0)
         }
 
     def update_tool_effectivity(self, tool: str, score: float) -> None:
+        if tool not in self.tool_effectivity.keys():
+            self.tool_effectivity[tool] = (0,0.0)
         count = self.tool_effectivity[tool][0] + 1
         prev_avg = self.tool_effectivity[tool][1] 
         new_avg = prev_avg + (score-prev_avg)/count
@@ -85,7 +88,7 @@ class Population:
         return [list(filter(lambda p: p.gen == i, self.prompts)) for i in range(max_gen+1)]
     
     def evaluate_iterations(self, data: Data) -> list[list[float]]:
-        scores_by_gen = [[data.eval_on_split(prompt, 'test', batch_size=-1) for prompt in gen] for gen in self.filter_by_iteration()]
+        scores_by_gen = [[data.eval_on_split(prompt, 'test', batch_size=-1) for prompt in gen] for gen in self.filter_by_iteration() if len(gen)>0]
         return scores_by_gen
     
     def quartile(self, i: int) -> list[Prompt]:
@@ -105,7 +108,8 @@ class Population:
         Returns:
             int: How many were purged
         """
-        purged = len(self)//4
+        self.dump()
+        purged = min(len(self)//4, 10)
         for i in range(purged):
             logger.info(f"PURGE WORST ({i}): {self.prompts[-1].text}")
             self.prompts[-1].active = False
@@ -124,7 +128,7 @@ class Population:
             int: How many were purged
         """
         self.dump()
-        purged = len(self)//4
+        purged = min(len(self)//4, 10)
         for i in range(purged):
             curr = self[i]
             most_similar = sorted(self.prompts[i+1:], key=lambda p: Levenshtein.distance(curr.text, p.text))[0]

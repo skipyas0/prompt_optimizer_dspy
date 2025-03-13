@@ -6,6 +6,7 @@ from prompt import Prompt
 import logging
 import utils
 import random
+import grading
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -44,7 +45,7 @@ class Data:
     def __get_solve_handle(self):
         solve_lm = utils.get_lm("SOLVE")
         
-        solve_module = dspy.ChainOfThought("question: str -> answer: float", temperature=SOLVE_TEMP)
+        solve_module = dspy.ChainOfThought(grading.str_signature, temperature=SOLVE_TEMP)
             
         def solve(question):
             try:
@@ -108,24 +109,21 @@ class Data:
             response = self.solve_handle(question=question)
             if response:
                 solutions = response.completions
-                gold = float(example.answer)
+                gold = example.answer
                 acc_score_on_sample = 0.0
                 N_SOLUTIONS = len(solutions.answer)
                 logger.debug(f"Grading problem {i+1} on split {split}")
                 for comp_idx in range(N_SOLUTIONS):
                     rationale = get_reasoning(solutions, comp_idx)
                     solution = solutions.answer[comp_idx]
-                    try:
-                        solution = float(solution)
-                        grade = 1.0 if solution==gold else 0.0
-                    except ValueError:
-                        logger.warning(f"Couldn't convert '{solution}' to float")
-                        grade = 0.0
+                    #grade = grading.score_connections(solution, gold, logger=logger)
+                    grade = grading.exact_match_float(solution, gold, logger=logger)
                     acc_score_on_sample += grade
                     logger.debug(f"Completion {comp_idx+1}\nRationale:{rationale}\nSolution:{solution}\t|\tGold:{gold}\nPass:{grade}\n")
-                prompt.completions.append((example, response.completions.reasoning[0], grade))
+                prompt.completions.append((example, get_reasoning(response.completions, 0), grade))
                 avg_score_on_sample = acc_score_on_sample / N_SOLUTIONS
                 self.scores[split][i] = avg_score_on_sample
                 batch_score += avg_score_on_sample
         prompt.set_score(split, batch_score / len(data))
         return prompt.get_score(split)
+

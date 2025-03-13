@@ -7,3 +7,4 @@ slurm
 *.ipynb
 archive
 datasets
+finished_experiments

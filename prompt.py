@@ -3,16 +3,20 @@ import logging
 import os
 import re
 from typing import Literal
+import signatures
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-handler = logging.FileHandler(f"{os.getenv('RUN_FOLDER')}/scores.log")
+handler = logging.FileHandler(f"{os.getenv('RUN_FOLDER')}/optim.log")
 handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+CREATIVE_TEMP = 0.75
+
+encoder = dspy.ChainOfThought(signature=signatures.Encode, temperature=CREATIVE_TEMP)
 class Prompt:
-    def __init__(self, prefix: str, suffix: str = "", gen: int = 0, origin: str = "unknown", active: bool = True):
+    def __init__(self, prefix: str, suffix: str = "", gen: int = 0, origin: str = "unknown", active: bool = True, characteristics: dict[str, str] = {}):
         self.prefix = prefix
         self.suffix = suffix
         self.text = prefix + suffix
@@ -22,7 +26,18 @@ class Prompt:
         self.__dev_score = -1.0 if self.valid else 0.0
         self.__test_score = -1.0 if self.valid else 0.0
         self.completions = []
-        self.active = True
+        self.active = active
+        if characteristics == {}:
+            try:
+                characteristics = encoder(input_prompt=self.text).characteristics
+                characteristics = {key.strip().lower().replace(" ", "_"): value for key, value in characteristics.items()}
+            except AttributeError as e:
+                logger.error(f"Encoder failed with exception {e}")
+                characteristics = {}
+        self.characteristics = characteristics
+
+        self.characteristics_string = '\n'.join([f'{k}: {v}' for k,v in self.characteristics.items()])
+        logger.info(f"Prompt {self.text} has the following characteristics: {self.characteristics_string}")
 
     def __valid(self) -> bool:
         """
@@ -63,11 +78,11 @@ class Prompt:
         return completion
         
     def jsoned(self) -> dict:
-        return {"gen": self.gen, "prompt": str(self), "dev_score": self.__dev_score, "test_score": self.__test_score, "origin": self.origin, "active": self.active}
+        return {"gen": self.gen, "prompt": str(self), "dev_score": self.__dev_score, "test_score": self.__test_score, "origin": self.origin, "active": self.active, "characteristics": self.characteristics}
     
     @classmethod
     def from_json(cls, prompt: dict):
-        p = Prompt(prompt["prompt"], "", prompt["gen"], prompt["origin"], prompt["active"])
+        p = Prompt(prompt["prompt"], "", prompt["gen"], prompt["origin"], prompt["active"], prompt["characteristics"])
         p.__dev_score = prompt["dev_score"]
         p.__test_score = prompt["test_score"]
         return p

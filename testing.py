@@ -1,28 +1,21 @@
 import os
-import time
 import dspy
 
 if __name__ == "__main__":
     # env setup
-    stamp = "lamarck-with-encoding"#round(time.time() % 31536000)
+    stamp = "gen10s"
     folder = f"runs/{stamp}"
 
-    os.environ["OPTIM_LM"] = "gpt-4o-mini"
     os.environ["SOLVE_LM"] = "gpt-4o-mini"
-    os.environ["OPTIM_OP"] = "ITERATIVE"
     os.environ['RUN_FOLDER'] = folder
     
     import utils
     initial_population = utils.check_and_load_population(folder)
-
-    from optimizer import Optimizer
+    from population import Population
     from data import Data
-
-    optim_lm = utils.get_lm("OPTIM")
-    dspy.configure(lm=optim_lm)
-
+    pop = Population(initial_population)
     data = Data.from_json("datasets/sequence_bench_quad_alt_rec_mod.json")
-    optim = Optimizer(data)
-    optim.begin(initial_population)
-    #optim.eval()
     
+    pop.evaluate_iterations(data)
+    pop.dump()
+
