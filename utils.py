@@ -1,3 +1,4 @@
+import builtins
 from datasets import load_dataset
 import json
 import dspy
@@ -8,6 +9,9 @@ from contextlib import redirect_stdout
 import traceback
 import multiprocessing
 import resource
+import ast
+from typing import Type, TypeVar, Any, get_origin, get_args
+
 SAFE_BUILTINS = {
     "print": print,
     "len": len,
@@ -188,6 +192,38 @@ def safe_int(value, default=0):
     except (ValueError, TypeError):
         return default
     
+
+def str_to_type(type_str: str):
+    return getattr(builtins, type_str, None)  
+
+
+
+T = TypeVar("T")
+
+
+
+T = TypeVar("T")
+
+def try_parse(val: Any, typ: Type[T]) -> T | None:
+    if isinstance(val, typ if not get_origin(typ) else get_origin(typ)):
+        return val
+    try:
+        parsed = ast.literal_eval(val) if isinstance(val, str) else val
+        if isinstance(parsed, typ if not get_origin(typ) else get_origin(typ)):
+            if get_origin(typ) and all(isinstance(item, get_args(typ)[0]) for item in parsed):
+                return parsed
+    except (ValueError, SyntaxError):
+        pass
+    return None
+    
 if __name__ == "__main__":
-    code = "print('Hello, world')"
-    print(execute_code(code))
+    generic = list[int]
+    val = "[9, 2]"
+    assert try_parse(val, generic) == [9, 2]
+
+    val_str = "['a', 'b']"
+    generic_str = list[str]
+    assert try_parse(val_str, generic_str) == ['a', 'b']
+
+    val_list = ['a', 'b']
+    assert try_parse(val_list, generic_str) == ['a', 'b']
