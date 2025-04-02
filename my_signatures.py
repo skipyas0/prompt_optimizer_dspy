@@ -10,7 +10,8 @@ class Field:
 
 
 class Signature:
-    def __init__(self, input_fields: list[Field], output_fields: list[Field]):
+    def __init__(self, input_fields: list[Field], output_fields: list[Field], instructions: str = ""):
+        self.instructions = instructions
         self.input_fields = input_fields
         self.output_fields = output_fields
 
@@ -69,7 +70,11 @@ class Signature:
         return Signature(io_fields[0], io_fields[1])
 
     def as_dict(self, prefix="") -> dict:
-        return {
+        # Optionally adds instructions field to inputs and outputs
+        # Prefix aids differentiating between main signature and a context signature in multi-turn settings
+        instructions = {prefix+"instructions": self.instructions} if len(self.instructions) > 0 else {}
+        # Dict join operator
+        return instructions | {
             prefix+"inputs": {
                 f"{f.name}": {"type": str(f.type), "description": f.desc, "value": None}
                  for f in self.input_fields
@@ -97,7 +102,4 @@ class Signature:
                 return False
         return True
     
-ask = Signature.from_str("question: str () -> answer: str (concise, clear and helpful answer to the user's question)")
-chain_of_thought = lambda answer_type: Signature.from_str(f"question: str () -> reasoning: str (step-by-step thinking process that leads to the answer);; answer: {answer_type} (final answer)")
-
 
