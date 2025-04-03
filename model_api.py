@@ -47,8 +47,6 @@ class ModelAPI:
         )
 
     def forward(self, messages, temp=None):
-        with open("wtf.json", "w+") as f:
-            json.dump(messages, f, indent=4)
         if temp is None:
             temp = self.temp
         completion = self.client.chat.completions.create(
@@ -76,7 +74,7 @@ class ModelAPI:
         tries = 0
         while tries < max_tries and ret is None:
             inputs = sorted(signature.mandatory_inputs())
-            print(f"Predict keys {sorted(list(kwargs.keys()))}, inputs {inputs}")
+            #print(f"Predict keys {sorted(list(kwargs.keys()))}, inputs {inputs}")
             assert sorted(list(kwargs.keys())) == inputs, f"Kwargs {kwargs} do not match the signature inputs {inputs}"
     
             signature_dict = signature.as_dict()

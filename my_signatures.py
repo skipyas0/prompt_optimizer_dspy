@@ -187,6 +187,23 @@ crossover = Signature(
     """)
 )
 
+crossover_char = Signature(
+    [
+        Field("prompt_a", str, ""),
+        Field("prompt_a_characteristics", dict, "description of the first prompt"),
+        Field("prompt_b", tuple, ""),
+        Field("prompt_b_characteristics", dict, "description of the second prompt"),
+        Field("prompt_proposal_characteristics", dict, "description to guide you in your prompt proposal"),
+    ],
+    [Field("prompt_proposal", str, "")],
+    textwrap.dedent("""\
+    Your supervisor tasked you with **generating a prompt** for a Large Language Model.
+    In the prompts field, you are given two distinct original prompts with their characteristics. 
+    Your task is create a novel prompt taking inspiration from both original prompts, according to the prompt_proposal_characteristics field.
+    Try to combine the best elements from both original prompts to create the best offspring prompt.
+    """)
+)
+
 mutation = Signature(
     [Field("input_prompt", str, "")],
     [Field("prompt_proposal", str, "")],
@@ -205,18 +222,17 @@ encode = Signature(
     [Field("input_prompt", str, "")],
     [
         Field("length", str, "How long is the prompt, shorter/longer than necessary ..."),
-        Field("starting_phrase", str, "The starting phrase of the prompt."),
-        Field("ending_phrase", str, "The ending phrase of the prompt."),
-        Field("formatting_brackets_location", str, "Location of formatting brackets ({}) in the prompt."),
-        Field("writing_style", str, "The writing style of the prompt (formal/informal, dry/interesting, ...)."),
+        #Field("starting_phrase", str, "The starting phrase of the prompt."),
+        #Field("ending_phrase", str, "The ending phrase of the prompt."),
+        #Field("formatting_brackets_location", str, "Location of formatting brackets ({}) in the prompt."),
+        #Field("writing_style", str, "The writing style of the prompt (formal/informal, dry/interesting, ...)."),
         Field("author", str, "A brief description of the imagined author of the prompt."),
         Field("theme", str, "The theme of the prompt (e.g., magical land, specific setting, etc.)."),
-        Field("identity", str, "Does the prompt assign an identity to the reader (e.g., proficient scientist, etc.)?"),
         Field("thinking_style", str, "The style of thinking promoted by the instructions in the prompt."),
         Field("specificity", str, "Does the prompt provide specific step-by-step instructions or is it general?"),
-        Field("desired_outcome", str, "What does the prompt ask for and in what way?"),
+        #Field("desired_outcome", str, "What does the prompt ask for and in what way?"),
         Field("examples_given", str, "Does the prompt give any examples? What is their nature?"),
-        Field("cot_induction", str, "Does the prompt induce Chain-of-Thought reasoning?"),
+        Field("cot_induction", str, "Does the prompt induce Chain-of-Thought using a cue similar to 'Let's think by step'?"),
         Field("persona_assignment", str, "Does the prompt utilize persona assignment techniques?"),
         Field("repetition", str, "Does the prompt have repetitive phrasing? Is it excessive or useful for emphasis?")
     ],
@@ -237,16 +253,10 @@ lamarckian_decoder = Signature(
     Given several task examples, design a suitable zero-shot prompt for a Large Language Model for that task according to the provided characteristics.
     Here is the overview of the characteristics provided to specify the nature of the prompt:
     - length (how long is the prompt, shorter/longer than necessary ...)
-    - starting phrase
-    - ending phrase
-    - formatting brackets location ({})
-    - writing_style (formal/informal, dry/interesting, ...)
     - author (imagine the person who could have written the prompt and describe them briefly)
     - theme (does the prompt try to put the reader into a specific setting, like some magical land etc.?)
-    - identity (does the prompt identity assignment to the reader, like saying they are a proficient scientiest etc.?)
     - thinking_style (what style of thinking do the instructions promote in the reader?)
     - specificity (does the prompt go into specific step-by-step instructions or is it general?)
-    - desired_outcome (what does the prompt ask for and in what way?)
     - examples_given  (does the prompt give any examples? what is their nature?)
     - cot_induction (does the prompt induce Chain-of-Thought using a cue similar to "Let's think by step"?)
     - persona assignment (does the prompt utilize the persona assignment technique ("Imagine you are a skilled writer" etc.)?)
@@ -255,6 +265,13 @@ lamarckian_decoder = Signature(
     Keep in mind to only **exactly** one pair of brackets '{}' in your prompts to indicate where the question should be inserted.
     """)
 )
+
+"""
+    - writing_style (formal/informal, dry/interesting, ...)
+    - starting phrase
+    - ending phrase
+    - formatting brackets location ({})
+    - desired_outcome (what does the prompt ask for and in what way?)"""
 
 analyst = Signature(
     [
