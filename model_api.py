@@ -59,7 +59,7 @@ class ModelAPI:
         )
         return completion
 
-    def predict(self, signature: Signature, temp=None, developer_prompt=None, max_tries=5, **kwargs):
+    def predict(self, signature: Signature, temp=None, developer_prompt=None, max_tries=10, **kwargs):
         if temp is None:
             temp = self.temp
         if developer_prompt is None:
@@ -132,7 +132,7 @@ class ModelAPI:
     ) -> tuple[str, dict]:
         if temp is None:
             temp = self.temp
-
+        signature = signature.copy()
         signature.update_outputs(
             [
                 Field(
@@ -155,7 +155,7 @@ class ModelAPI:
         logger.info(f"Running {n_chains} chains for CoT with self-consistency.")
 
         completions = [
-            self.chain_of_thought(signature.copy(), temp=temp, **kwargs)
+            self.chain_of_thought(signature, temp=temp, **kwargs)
             for _ in range(n_chains)
         ]
 
@@ -242,7 +242,7 @@ class ModelAPI:
         while answer is None and i < max_iters:
             kwargs.update({"trajectory": trajectory, "tools": tool_info})
 
-            thought, content = self.chain_of_thought(signature.copy(), temp=temp, **kwargs)
+            thought, content = self.chain_of_thought(signature, temp=temp, **kwargs)
 
             # parse reasoning and answer
             try:
@@ -327,7 +327,7 @@ class ModelAPI:
             temp = self.temp
 
         trajectory = []
-        reasoning, answer = self.chain_of_thought(signature.copy(), temp=temp, **kwargs)
+        reasoning, answer = self.chain_of_thought(signature, temp=temp, **kwargs)
         trajectory.append(
             {"role": "solve", "content": {"reasoning": reasoning, "answer": answer}}
         )
@@ -373,7 +373,7 @@ class ModelAPI:
 
         for i in range(iters):
             evaluation_reasoning, eval_and_reflect = self.chain_of_thought(
-                eval_and_reflect_signature.copy(),
+                eval_and_reflect_signature,
                 temp=temp,
                 original_request=signature.as_dict(),
                 student_reasoning=reasoning,
@@ -570,7 +570,7 @@ class ModelAPI:
 
                 # score new thought
                 evaluation = self.chain_of_thought(
-                    state_evaluation_signature.copy(),
+                    state_evaluation_signature,
                     temp=temp,
                     original_request=signature_dict,
                     previous_thoughts=previous_thoughts,

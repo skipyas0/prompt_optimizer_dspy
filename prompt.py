@@ -1,20 +1,22 @@
-import dspy
 import logging
 import os
 import re
 from typing import Literal
-import signatures
-logger = logging.getLogger(__name__)
+from model_api import model
+import my_signatures as sig
+
+"""logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 handler = logging.FileHandler(f"{os.getenv('RUN_FOLDER')}/optim.log")
 handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
-logger.addHandler(handler)
+logger.addHandler(handler)"""
 
 CREATIVE_TEMP = 0.75
 
-encoder = dspy.ChainOfThought(signature=signatures.Encode, temperature=CREATIVE_TEMP)
+encoder = lambda text: model.chain_of_thought(sig.encode, input_prompt=text)[1]
+#encoder = dspy.ChainOfThought(signature=signatures.Encode, temperature=CREATIVE_TEMP)
 class Prompt:
     def __init__(self, prefix: str, suffix: str = "", gen: int = 0, origin: str = "unknown", active: bool = True, characteristics: dict[str, str] = {}):
         self.prefix = prefix
@@ -29,15 +31,15 @@ class Prompt:
         self.active = active
         if characteristics == {}:
             try:
-                characteristics = encoder(input_prompt=self.text).characteristics
+                characteristics = encoder(self.text)#encoder(input_prompt=self.text).characteristics
                 characteristics = {key.strip().lower().replace(" ", "_"): value for key, value in characteristics.items()}
             except AttributeError as e:
-                logger.error(f"Encoder failed with exception {e}")
+                #logger.error(f"Encoder failed with exception {e}")
                 characteristics = {}
         self.characteristics = characteristics
 
         self.characteristics_string = '\n'.join([f'{k}: {v}' for k,v in self.characteristics.items()])
-        logger.info(f"Prompt {self.text} has the following characteristics: {self.characteristics_string}")
+        #logger.info(f"Prompt {self.text} has the following characteristics: {self.characteristics_string}")
 
     def __valid(self) -> bool:
         """
@@ -56,8 +58,8 @@ class Prompt:
             valid = False 
         self.text = self.text.replace('\"', '')
         valid = valid and len(re.findall("{[^}]|[^{]}", str(self.text))) == 0 
-        if not valid:
-            logger.warning(f"Prompt '{self.text}' is invalid")
+        #if not valid:
+            #logger.warning(f"Prompt '{self.text}' is invalid")
         return valid
     
     def __str__(self) -> str:
