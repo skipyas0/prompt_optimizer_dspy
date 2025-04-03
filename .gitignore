@@ -5,3 +5,6 @@ runs
 *.log
 slurm
 *.ipynb
+finished_experiments
+datasets
+archive
