@@ -1,25 +1,45 @@
-import dspy
 import logging
 import os
 import re
+from typing import Literal
+from model_api import model
+import my_signatures as sig
 
-logger = logging.getLogger(__name__)
+"""logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-handler = logging.FileHandler(f"{os.getenv('RUN_FOLDER')}/scores.log")
+handler = logging.FileHandler(f"{os.getenv('RUN_FOLDER')}/optim.log")
 handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
-logger.addHandler(handler)
+logger.addHandler(handler)"""
 
+CREATIVE_TEMP = 0.75
+
+encoder = lambda text: model.chain_of_thought(sig.encode, input_prompt=text)[1]
+#encoder = dspy.ChainOfThought(signature=signatures.Encode, temperature=CREATIVE_TEMP)
 class Prompt:
-    def __init__(self, prefix: str, suffix: str, gen: int):
+    def __init__(self, prefix: str, suffix: str = "", gen: int = 0, origin: str = "unknown", active: bool = True, characteristics: dict[str, str] = {}):
         self.prefix = prefix
         self.suffix = suffix
         self.text = prefix + suffix
         self.gen = gen
-        valid = self.__valid()
-        self.__dev_score = -1.0 if valid else 0.0
-        self.__test_score = -1.0 if valid else 0.0
+        self.origin = origin
+        self.valid = self.__valid()
+        self.__dev_score = -1.0 if self.valid else 0.0
+        self.__test_score = -1.0 if self.valid else 0.0
+        self.completions = []
+        self.active = active
+        if characteristics == {}:
+            try:
+                characteristics = encoder(self.text)#encoder(input_prompt=self.text).characteristics
+                characteristics = {key.strip().lower().replace(" ", "_"): value for key, value in characteristics.items()}
+            except AttributeError as e:
+                #logger.error(f"Encoder failed with exception {e}")
+                characteristics = {}
+        self.characteristics = characteristics
+
+        self.characteristics_string = '\n'.join([f'{k}: {v}' for k,v in self.characteristics.items()])
+        #logger.info(f"Prompt {self.text} has the following characteristics: {self.characteristics_string}")
 
     def __valid(self) -> bool:
         """
@@ -38,8 +58,8 @@ class Prompt:
             valid = False 
         self.text = self.text.replace('\"', '')
         valid = valid and len(re.findall("{[^}]|[^{]}", str(self.text))) == 0 
-        if not valid:
-            logger.warning(f"Prompt '{self.text}' is invalid")
+        #if not valid:
+            #logger.warning(f"Prompt '{self.text}' is invalid")
         return valid
     
     def __str__(self) -> str:
@@ -47,52 +67,24 @@ class Prompt:
     
     def format(self, s: str) -> str:
         return self.text.format(s)
-
-    def score(self, batch: list[dspy.Example], solve: dspy.Module, final: bool = False) -> float:
-        if final:
-            gs = lambda: self.__test_score
-            def ss(x): self.__test_score = x
-            split_name = "TEST"
-        else: 
-            gs = lambda: self.__dev_score
-            def ss(x): self.__dev_score = x
-            split_name = "DEV"
-
-        if gs() >= 0.0:
-            return gs()
-            
-        batch_score = 0.0
-        for i, example in enumerate(batch):
-            question = self.format(example.question)
-            response = solve(question=question)
-            if response:
-                solutions = response.completions
-                example = float(example.answer)
-                avg_score_on_sample = 0.0
-                N_SOLUTIONS = len(solutions.answer)
-                logger.debug(f"Grading problem {i+1} on split {split_name}")
-                for comp_idx in range(N_SOLUTIONS):
-                    rationale = solutions.rationale[comp_idx]
-                    solution = solutions.answer[comp_idx]
-                    try:
-                        solution = float(solution)
-                        grade = 1.0 if solution==example else 0.0
-                    except ValueError:
-                        logger.warning(f"Couldn't convert '{solution}' to float")
-                        grade = 0.0
-                    avg_score_on_sample += grade
-                    logger.debug(f"Completion {comp_idx+1}\nRationale:{rationale}\nSolution:{solution}\t|\tGold:{example}\nPass:{grade}\n")
-                batch_score += avg_score_on_sample / N_SOLUTIONS
-
-        ss(batch_score / len(batch))
-        return gs()
+    
+    def get_completion(self, grade: Literal[0, 1]):
+        if len(self.completions) == 0:
+            return None
+        try:
+            # get a wrong completion
+            completion = next(filter(lambda c: c[2] == grade, self.completions))
+        except StopIteration:
+            # get any completion
+            completion = self.completions[-1]
+        return completion
         
     def jsoned(self) -> dict:
-        return {"gen": self.gen, "prompt": str(self), "dev_score": self.__dev_score, "test_score": self.__test_score}
+        return {"gen": self.gen, "prompt": str(self), "dev_score": self.__dev_score, "test_score": self.__test_score, "origin": self.origin, "active": self.active, "characteristics": self.characteristics}
     
     @classmethod
     def from_json(cls, prompt: dict):
-        p = Prompt(prompt["prompt"], "", prompt["gen"])
+        p = Prompt(prompt["prompt"], "", prompt["gen"], prompt["origin"], prompt["active"], prompt["characteristics"])
         p.__dev_score = prompt["dev_score"]
         p.__test_score = prompt["test_score"]
         return p
@@ -102,3 +94,21 @@ class Prompt:
     
     def prompt_and_perf(self):
         return (self.text, self.__dev_score)
+    
+    def get_score(self, split: Literal["dev", "test"]):
+        if split == "dev":
+            return self.__dev_score
+        elif split == "test":
+            return self.__test_score
+        else:
+            raise ValueError(f"Wrong split {split}")
+    
+    def set_score(self, split: Literal["dev", "test"], score):
+        old_score = self.get_score(split)
+        if old_score == -1.0:
+            if split == "dev":
+                self.__dev_score = score
+            else:
+                self.__test_score = score
+        else:
+            raise ValueError(f"Prompt already has score {old_score}")
