@@ -1,5 +1,4 @@
 import utils
-import dspy
 
 float_signature = "question: str -> answer: float"
 def exact_match_float(solution, gold, logger=None):
@@ -31,7 +30,7 @@ def match_lists(solution, gold, logger=None):
     if len(solution) != len(gold):
         return acc
     for s, g in zip(sorted(solution), sorted(gold)):
-        if type(s) == list and type(g) == list:
+        if isinstance(s, list) and isinstance(g, list):
             acc += match_lists(s, g, logger=logger)
         elif s.strip().lower() == g.strip().lower():
             acc += 1.0

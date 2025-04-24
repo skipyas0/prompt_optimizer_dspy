@@ -23,7 +23,7 @@ class Signature:
         self.output_fields = output_fields
 
     def copy(self) -> Signature:
-        return Signature(self.input_fields.copy(), self.output_fields.copy())
+        return Signature(self.input_fields.copy(), self.output_fields.copy(), self.instructions[:])
 
     def mandatory_inputs(self) -> list[str]:
         return [f.name for f in self.input_fields]
@@ -88,13 +88,13 @@ class Signature:
         return instructions | {
             prefix
             + "inputs": {
-                f"{f.name}": {"type": str(f.type), "description": f.desc, "value": None}
+                f"{f.name}": None
                 for f in self.input_fields
             },
             prefix
             + "outputs": {
                 f"{f.name}": {
-                    "type": str(f.type),
+                    "type": f.type.__name__,
                     "description": f.desc,
                 }
                 for f in self.output_fields
@@ -113,8 +113,9 @@ class Signature:
         for field in self.output_fields:
             if field.name not in output.keys():
                 return False
-            if not field.type is type(output[field.name]):
-                output[field.name] = utils.try_parse(output[field.name], field.type)
+            #if not isinstance(output[field.name], field.type):
+            #    print("before try parse:", field.name, field.type, '\n', output[field.name])
+            #    output[field.name] = utils.try_parse(output[field.name], field.type)
             if output[field.name] is None:
                 return False
         outputs = self.mandatory_outputs()
@@ -124,7 +125,7 @@ class Signature:
         return True
     
 lamarckian = Signature(
-    [Field("examples", list, "")],
+    [Field("task_examples", list, "")],
     [Field("prompt_proposal", str, "")],
     textwrap.dedent("""\
     Your supervisor tasked you with **generating a prompt** for a Large Language Model.
@@ -144,11 +145,11 @@ lamarckian = Signature(
     """)
 )
 
-reflective = Signature(
+reflective1 = Signature(
     [
         Field("original_prompt", str, ""),
         Field("task_question", str, ""),
-        Field("reasoning", str, "")
+        Field("solution", str, "")
     ],
     [Field("prompt_proposal", str, "")],
     textwrap.dedent("""\
@@ -163,13 +164,38 @@ reflective = Signature(
     Your task is to alter the original prompt to eliminate the problems from your critique.
     """)
 )
+reflective2 = Signature(
+    [
+        Field("original_prompt", str, ""),
+        Field("task_question", str, ""),
+        Field("solution", str, "")
+    ],
+    [Field("original_prompt_critique", str, ""), Field("prompt_proposal", str, "")],
+    textwrap.dedent("""\
+    Improve a prompt for an LLM.
+    
+    You are an intelligent reflection function capable of advanced reasoning and prompt synthesis.
+    Follow these steps to craft a better prompt:
+    - Analyze the original prompt and its suboptimal performance on a task sample.
+    - Find failure points in the solution and cross-reference to identify weaknesses in the prompt.
+    - Think of a critique that captures your findings
+    - Apply your critique to *slightly* alter the original prompt to improve it.
+    Your improved prompt should still be **widely applicable and generic**.
+
+    Maintain the same formatting as in the original prompt.  
+    In the final answer, do not include a title or any additional data, just the prompt.
+    """)
+)
 
 iterative = Signature(
     [Field("old_prompts", list, "")],
     [Field("prompt_proposal", str, "")],
     textwrap.dedent("""\
-    Your supervisor tasked you with **generating a prompt** for a Large Language Model.
-    Given several prompts and their respective scores, propose new prompt.
+    Craft a new prompt for an LLM
+    
+    You are given a given a history of past prompts along with their scores.
+    They are listed in ascending order of fitness.
+    Follow the sequence and design an improved prompt. 
     """)
 )
 
@@ -187,20 +213,102 @@ crossover = Signature(
     """)
 )
 
-crossover_char = Signature(
-    [
-        Field("prompt_a", str, ""),
-        Field("prompt_a_characteristics", dict, "description of the first prompt"),
-        Field("prompt_b", tuple, ""),
-        Field("prompt_b_characteristics", dict, "description of the second prompt"),
-        Field("prompt_proposal_characteristics", dict, "description to guide you in your prompt proposal"),
-    ],
-    [Field("prompt_proposal", str, "")],
+
+lamarckian1 = Signature(
+    [Field("task_examples", list, "Samples from problem class")],
+    [Field("instruction_proposal", str, "Instructions for solving the problem")],
     textwrap.dedent("""\
-    Your supervisor tasked you with **generating a prompt** for a Large Language Model.
-    In the prompts field, you are given two distinct original prompts with their characteristics. 
-    Your task is create a novel prompt taking inspiration from both original prompts, according to the prompt_proposal_characteristics field.
-    Try to combine the best elements from both original prompts to create the best offspring prompt.
+    Create a general step-by-step instruction to help the user solve a class of problems.
+    
+    You are a wise advisor with general knowledge about many tasks.
+    Look at examples of the problem class under the 'task_examples' field
+    and design a tutorial that will guarantee the user's success at solving similar tasks in the future.
+    Make sure your instructions are general and apply to all given samples simultaneously.
+    
+    Use markdown formatting in you final answer to indicate bullet points and whatever else necessary.
+    """)
+)
+
+lamarckian2 = Signature(
+    [Field("task_examples", list, "Samples from problem class")],
+    [Field("instruction_proposal", str, "Instructions for solving the problem")],
+    textwrap.dedent("""\
+    Create a **general** step-by-step instruction to help the user solve a class of problems.
+    
+    You are a wise advisor with general knowledge about many tasks.
+    Look at examples of the problem class under the 'task_examples' field
+    and design a tutorial that will guarantee the user's success at solving similar tasks in the future.
+    Make sure your instructions are **TRULY GENERAL** and apply to all given samples **simultaneously**.
+                    
+    Use markdown formatting in you final answer to indicate bullet points and whatever else necessary.
+    """)
+)
+
+
+lamarckian3 = Signature(
+    [Field("task_examples", list, "Samples from a problem category")],
+    [Field("instruction_proposal", str, "Instructions for solving a different problem of the same category")],
+    textwrap.dedent("""\
+    Create a **general** step-by-step instruction to help the user solve a category of problems.
+    
+    You are a wise advisor with general knowledge about many tasks.
+    Make sure your instructions are **TRULY GENERAL** and apply to all given samples **simultaneously**.
+                    
+    Follow these steps to make sure your answer is worthy:
+        1 - Look at ALL examples in the 'task_examples' field.
+        2 - Identify common elements, find the task category.
+        3 - Create a step-by-step tutorial that applies to ALL the examples. 
+        4 - Look over your tutorial to make sure it is truly general and helpful.
+        5 - Write the final step-by-step instruction     
+                    
+    Use markdown formatting in you final answer to indicate bullet points and whatever else necessary.
+    """)
+)
+
+lamarckian4 = Signature(
+    [Field("task_examples", list, "Samples from a problem category"), Field("focus", list, "Values to focus on")],
+    [Field("instruction_proposal", str, "Instructions for solving a different problem of the same category")],
+    textwrap.dedent("""\
+    Create a **general** step-by-step instruction to help the user solve a category of problems.
+                    
+    Follow these steps to make sure your answer is worthy:
+        1 - Look at ALL examples in the 'task_examples' field.
+        2 - Identify common elements, find the task category.
+        3 - Create a step-by-step tutorial that applies to ALL the examples. 
+        4 - Look over your tutorial to make sure it is truly general and helpful.
+        5 - Write the final step-by-step instruction     
+    """)
+)
+
+lamarckian5 = Signature(
+    [Field("task_examples", list, "Samples from a problem class"), Field("focus", list, "Values to focus on")],
+    [Field("instruction_proposal", str, "Instructions for solving the problem")],
+    textwrap.dedent("""\
+    Create a **general** step-by-step instruction to help the user solve a class of problems.
+    
+    You are a wise advisor with general knowledge about many tasks.
+    Look at examples of the problem class under the 'task_examples' field
+    and design a tutorial that will guarantee the user's success at solving similar tasks in the future.
+    Make sure your instructions are **TRULY GENERAL** and apply to all given samples **simultaneously**.
+                    
+    Use markdown formatting in you final answer to indicate bullet points and whatever else necessary.
+    """)
+)
+
+lamarckian6 = Signature(
+    [Field("task_examples", list, "Samples from a problem class"), Field("focus", list, "Values to focus on")],
+    [Field("prompt_proposal", str, "Instructions for solving the problem")],
+    textwrap.dedent("""\
+    Craft **general** developer prompt to help an LLM with solving a class of problems.
+    
+    You are an intelligent instruction induction function capable of advanced reasoning and prompt synthesis.
+    Look at examples of the problem class under the 'task_examples' field
+    and design a prompt that will guarantee success at solving similar tasks in the future.
+    Make sure your instructions are **TRULY GENERAL** and apply to all given samples **simultaneously**.
+
+    Use markdown formatting in you final answer to indicate bullet points and whatever else necessary.
+    
+    In the final answer, do not include a title or any additional data, just the prompt.
     """)
 )
 
@@ -216,77 +324,4 @@ mutation = Signature(
     - Add some of your reasoning to the prompt, particularly if the prompt includes examples where the answer is provided without explanation.
     Try to be original so that your prompt is fresh and interesting while still having all the instructional value.
     """)
-)
-
-encode = Signature(
-    [Field("input_prompt", str, "")],
-    [
-        Field("length", str, "How long is the prompt, shorter/longer than necessary ..."),
-        #Field("starting_phrase", str, "The starting phrase of the prompt."),
-        #Field("ending_phrase", str, "The ending phrase of the prompt."),
-        #Field("formatting_brackets_location", str, "Location of formatting brackets ({}) in the prompt."),
-        #Field("writing_style", str, "The writing style of the prompt (formal/informal, dry/interesting, ...)."),
-        Field("author", str, "A brief description of the imagined author of the prompt."),
-        Field("theme", str, "The theme of the prompt (e.g., magical land, specific setting, etc.)."),
-        Field("thinking_style", str, "The style of thinking promoted by the instructions in the prompt."),
-        Field("specificity", str, "Does the prompt provide specific step-by-step instructions or is it general?"),
-        #Field("desired_outcome", str, "What does the prompt ask for and in what way?"),
-        Field("examples_given", str, "Does the prompt give any examples? What is their nature?"),
-        Field("cot_induction", str, "Does the prompt induce Chain-of-Thought using a cue similar to 'Let's think by step'?"),
-        Field("persona_assignment", str, "Does the prompt utilize persona assignment techniques?"),
-        Field("repetition", str, "Does the prompt have repetitive phrasing? Is it excessive or useful for emphasis?")
-    ],
-    textwrap.dedent("""\
-    Your supervisor tasked you with **describing** a piece of text, specifically a prompt for a Large Language Model.
-    Look at the input prompt and write and describe it **briefly** (with a few words or numerically) for each of description aspects.
-    """)
-)
-
-lamarckian_decoder = Signature(
-    [
-        Field("examples", list, ""),
-        Field("characteristics", dict, "")
-    ],
-    [Field("prompt_proposal", str, "")],
-    textwrap.dedent("""\
-    Your supervisor tasked you with **generating a prompt** for a Large Language Model.
-    Given several task examples, design a suitable zero-shot prompt for a Large Language Model for that task according to the provided characteristics.
-    Here is the overview of the characteristics provided to specify the nature of the prompt:
-    - length (how long is the prompt, shorter/longer than necessary ...)
-    - author (imagine the person who could have written the prompt and describe them briefly)
-    - theme (does the prompt try to put the reader into a specific setting, like some magical land etc.?)
-    - thinking_style (what style of thinking do the instructions promote in the reader?)
-    - specificity (does the prompt go into specific step-by-step instructions or is it general?)
-    - examples_given  (does the prompt give any examples? what is their nature?)
-    - cot_induction (does the prompt induce Chain-of-Thought using a cue similar to "Let's think by step"?)
-    - persona assignment (does the prompt utilize the persona assignment technique ("Imagine you are a skilled writer" etc.)?)
-    - repetition (does the prompt have repetitive phrasing? is it excessive or could it be useful for emphasis?)
-    Having reflected on these characteristics and the task examples provided, **design your prompt**. 
-    Keep in mind to only **exactly** one pair of brackets '{}' in your prompts to indicate where the question should be inserted.
-    """)
-)
-
-"""
-    - writing_style (formal/informal, dry/interesting, ...)
-    - starting phrase
-    - ending phrase
-    - formatting brackets location ({})
-    - desired_outcome (what does the prompt ask for and in what way?)"""
-
-analyst = Signature(
-    [
-        Field("question", str, ""),
-        Field("context", dict, "")
-    ],
-    [Field("answer", str, "")],
-    textwrap.dedent("""\
-    You are an analyst in a prompt optimization process.
-    Your supervisor asked you a question and you will answer it concisely based on the provided context.
-    """)
-)
-
-optimization_success = Signature(
-    [Field("introduction", str, "Optimization Director metaprompt.")],
-    [Field("result", bool, "Was the optimization succesful?")],
-    "Guide a prompt optimization procedure to achieve the best possible result."
 )

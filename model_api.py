@@ -13,7 +13,7 @@ from my_signatures import Signature, Field
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-base = os.getenv("BASE_PATH") or "."
+base = os.getenv('RUN_FOLDER') or "."
 handler = logging.FileHandler(f"{base}/model_api.log")
 handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
@@ -22,7 +22,7 @@ logger.addHandler(handler)
 
 
 class ModelAPI:
-    def __init__(self, temp=0.6, api_key=None, identifier=None, logging=True) -> None:
+    def __init__(self, temp=0.75, api_key=None, identifier=None, logging=True) -> None:
         self.temp = temp
         self.identifier = identifier
         load_dotenv()
@@ -38,8 +38,13 @@ class ModelAPI:
             )
         elif api_key:
             # hosted on openai
-            self.model = "gpt-4o-mini"
-            self.client = openai.OpenAI(api_key=api_key)
+            #self.model = "gpt-4o-mini"
+            #self.client = openai.OpenAI(api_key=api_key)
+            self.model = "google/gemma-3-27b-it:free"
+            self.fallback = ["google/gemma-3-27b-it"]
+            self.client = openai.OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=os.getenv("OPENROUTER"))
         else:
             raise ValueError("No API key or port specified")
         logger.info(
@@ -47,26 +52,53 @@ class ModelAPI:
         )
 
     def forward(self, messages, temp=None):
+        #with open("forward.json", "w+") as f:
+        #    json.dump(messages, f)
+        logger.debug(f"Forwarding...\n{str(messages)}")
         if temp is None:
             temp = self.temp
         completion = self.client.chat.completions.create(
             model=self.model,
+            extra_body={
+                "models": self.fallback
+            },
             messages=messages,
             temperature=temp,
             n=1,
         )
+        #with open("completion.json", "w+") as f:
+        #    json.dump(completion.choices[0].message.content, f)
+        logger.debug(f"Getting completion\n{str(completion)}")
         return completion
 
-    def predict(self, signature: Signature, temp=None, developer_prompt=None, max_tries=10, **kwargs):
+    def predict(self, signature: Signature, temp=None, developer_prompt=None, max_tries=1, **kwargs):
         if temp is None:
             temp = self.temp
         if developer_prompt is None:
             developer_prompt = textwrap.dedent(
                 """\
-                Answer the request in JSON format according to the requirements.
-                Input variables are specified in the 'inputs' field along with input *values*.
-                Desired outputs are described in the 'outputs' field.
-                Respond in JSON format to answer all output fields.
+                You are an intelligent function that returns structured JSON outputs matching a given schema.
+
+                - You will receive a JSON object containing:
+                    - `instructions`: a task or question to answer
+                    - `inputs`: a dictionary of named inputs
+                    - `outputs`: a dictionary specifying the expected output fields with their types and descriptions
+
+                Your job is to:
+                    1. Understand the task from `instructions`
+                    2. Use the `inputs` to compute or generate the answer
+                    3. Respond **only** with keys from the `outputs` dictionary and values matching the described types
+
+                Only return a flat JSON object like:
+                {
+                "field1": <value matching type and description>,
+                "field2": <...>
+                }
+
+                Do not add metadata, explanations, or wrap outputs in additional structures.
+                Do not include type names or field descriptions in the output.
+
+                Your output must be strictly valid JSON and fill **all** requested output fields.
             """
             )
         # repeat attempt up to max_tries when response is invalid
@@ -80,7 +112,7 @@ class ModelAPI:
             signature_dict = signature.as_dict()
     
             for k, v in kwargs.items():
-                signature_dict["inputs"][k]["value"] = v
+                signature_dict["inputs"][k] = v
             msgs = [
                 {
                     "role": "developer",
@@ -100,12 +132,12 @@ class ModelAPI:
     
             content = completion.choices[0].message.content
             try:
-                start = content.index("{")
-                end = content.rindex("}") + 1
-                json_str = content[start:end]
-                json_str = json_str.replace("\n", "").strip()
-                json_str = json_str.replace("\\", "\\\\")  # Escape backslashes
-                json_obj = json.loads(json_str)
+                # start = content.index("{")
+                # end = content.rindex("}") + 1
+                # json_str = content[start:end]
+                # json_str = json_str.replace("\\n", "").strip()
+                # json_str = json_str.replace("\\", "\\\\")  # Escape backslashes
+                json_obj = extract_json_block(content)
                 ret_attempt = dict(json_obj)
                 assert signature.matches_output(
                     ret_attempt
@@ -142,6 +174,8 @@ class ModelAPI:
         )
 
         ret = self.predict(signature, temp=temp, **kwargs)
+        if ret is None:
+            return None, None
         reasoning = ret.pop("reasoning")
         return reasoning, ret
 
@@ -457,7 +491,7 @@ class ModelAPI:
             def get_thought_chain(self):
                 chain = []
                 node = self
-                while node.parent != None:
+                while node.parent is not None:
                     chain.append(node.thought)
                     node = node.parent
                 return chain[::-1]
@@ -605,21 +639,42 @@ class ModelAPI:
         return [node.get_thought_chain() for node in solution_nodes], answer
 
 
+def extract_json_block(text):
+    # Remove any outer quotation marks if they wrap the entire content
+    if (text.startswith("'") and text.endswith("'")) or \
+       (text.startswith('"') and text.endswith('"')):
+        text = text[1:-1]
+    
+    code_block_pattern = r'```(?:json)?\s*(.*?)\s*```'
+    match = re.search(code_block_pattern, text, re.DOTALL)
+    
+    if match:
+        json_content = match.group(1)
+    else:
+        json_content = text
+ 
+    # Consistent new-lines
+    json_content = json_content.replace(r'\\n', r'__ESCAPED_NEWLINE__')
+    json_content = json_content.replace(r'\n', r'')
+    json_content = json_content.replace(r'__ESCAPED_NEWLINE__', r'\\n')
+
+    # Other invalid escapes
+    json_content = json_content.replace("\\'", "'")
+    json_content = re.sub(r'\\{2}"', r'\\"', json_content)
+    json_content = re.sub(r'\\{4}', r'\\\\', json_content)
+    
+    try:
+        return json.loads(json_content)
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON after cleanup: {e}")
+        print(f"Problem occurred at position {e.pos}")
+        print(json_content)
+        return None
+
 model = ModelAPI()
 
 if __name__ == "__main__":
-    sig = Signature.from_str(
-            "question: str () -> answer: int ()"
-        )
-    q = textwrap.dedent("""\
-The proper divisors of 12 are 1, 2, 3, 4 and 6. A proper divisor of an integer $N$ is a positive divisor of $N$ that is less than $N$. What is the sum of the proper divisors of the sum of the proper divisors of 284?
-                        """)
-    def calculate(expression: str) -> float:
-        """
-        Evaluate the given mathematical expression
-        """
-        return eval(expression)
-    #response = model.react(signature=sig, question=q, tools=[calculate])
-    response = model.chain_of_thought_sc(signature=sig, question=q)
-    print(response)
-
+    with open("forward.txt", "r") as f:
+        a = f.read()
+    js = extract_json_block(a)
+    print(js)

@@ -3,8 +3,6 @@ from prompt import Prompt
 import json
 import os
 import random
-from typing import Callable
-import os
 import logging
 import Levenshtein
 
@@ -42,7 +40,7 @@ class Population:
         self.tool_effectivity[tool] = (count, new_avg)
 
     def add(self, prompts: Prompt | list[Prompt]) -> None:
-        if type(prompts) == Prompt:
+        if isinstance(prompts, Prompt):
             prompts = [prompts]
         for prompt in prompts:
             self.prompts.append(prompt)
@@ -60,6 +58,8 @@ class Population:
         return self.prompts[:n]
 
     def select(self, n: int) -> list[Prompt]:
+        if n >= len(self.prompts):
+            return self.prompts
         counts = [p.score_to_count() for p in self.prompts]
         return random.sample(self.prompts, n, counts=counts)
 
@@ -128,7 +128,7 @@ class Population:
             int: How many were purged
         """
         self.dump()
-        purged = min(len(self)//4, 10)
+        purged = max(min(len(self)//4, 10), 1) # clip(pop//4, 1, 10)
         for i in range(purged):
             curr = self[i]
             most_similar = sorted(self.prompts[i+1:], key=lambda p: Levenshtein.distance(curr.text, p.text))[0]

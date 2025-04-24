@@ -1,9 +1,7 @@
 import builtins
 from datasets import load_dataset
 import json
-import dspy
 import os
-from typing import Literal
 import io
 from contextlib import redirect_stdout
 import traceback
@@ -62,16 +60,6 @@ def download_gsm8k():
     with open("gsm8k.json", "w+") as f:
         json.dump(ds, f)
 
-def load_data(path):
-    with open(f"{path}", "r") as f:
-        data = json.load(f)
-    def examplify(s):
-        ret = dspy.Example(question=s["question"], answer=s["answer"])
-        ret.with_inputs("question")
-        return ret
-    
-    data = map(examplify, data)
-    return list(data)
 
 
 def load_gsm8k_server():
@@ -83,43 +71,9 @@ def load_gsm8k_server():
         return {'question': example['question'], 'answer': example['answer']}
     
     ds = ds.map(map_gsm8k, remove_columns=ds.column_names, load_from_cache_file=False).to_list()
-    def examplify(s):
-        ret = dspy.Example(question=s["question"], answer=s["answer"])
-        ret.with_inputs("question")
-        return ret
-    
-    ds = map(examplify, ds)
+
     return list(ds)
 
-
-def format_examples(examples: list[dspy.Example]) -> str:
-    TEMPLATE = "Question: {q}\nAnswer: {a}"
-    example_strings = [TEMPLATE.format(q=e.question, a=e.answer) for e in examples]
-    return "\n".join(example_strings)
-
-def get_lm(lm_use: Literal["OPTIM", "SOLVE"], uni: bool = True) -> dspy.LM:
-    vllm_port = os.getenv("VLLM_MY_PORT")
-    
-    if lm_use == "OPTIM":
-        lm = os.environ["OPTIM_LM"]
-        op_type = os.environ["OPTIM_OP"]
-    else:
-        lm = os.environ["SOLVE_LM"]
-        op_type = "SOLVE"
-
-    if uni:
-        op_type = "UNIVERSAL"
-
-    if "gpt" in lm:
-        from dotenv import load_dotenv
-        load_dotenv()
-        api_key = os.environ[f"API_KEY_{op_type}"]
-        lm = dspy.LM(lm, api_key=api_key, cache=False)
-    elif vllm_port:
-        lm = dspy.LM(lm, api_base=f"http://localhost:{vllm_port}/v1", api_key="EMPTY", cache=False)
-    else:
-        raise ValueError("No valid model config for lm {lm} and no vllm port")
-    return lm
 
 def check_and_load_population(folder: str) -> list:
     initial_population = []
@@ -127,7 +81,7 @@ def check_and_load_population(folder: str) -> list:
         if os.path.exists(folder+'/prompts.jsonl'):
             from prompt import Prompt   
             with open(folder+'/prompts.jsonl', 'r') as f:
-                prompts = [json.loads(l) for l in f.readlines()]
+                prompts = [json.loads(line) for line in f.readlines()]
                 initial_population = [Prompt.from_json(p) for p in prompts]
     else:
         os.mkdir(folder)
@@ -140,9 +94,9 @@ def deseparate_into_lists(string, sep1=',', sep2=';'):
     
 
 def recursive_string_normalize(inp: str | list):
-    if type(inp) == list:
+    if isinstance(inp, list):
         return [recursive_string_normalize(subinp) for subinp in inp]
-    if type(inp) == str:
+    if isinstance(inp, str):
         return inp.strip().lower()
     return None
 
@@ -183,9 +137,6 @@ def execute_code(raw_code: str) -> str:
 
     return queue.get() if not queue.empty() else "No output detected."
 
-antonymum = dspy.Predict("phrase: str, phrase_context: str -> opposite_meaning_phrase_in_context: str")
-twist = dspy.Predict("phrase: str, phrase_context: str -> phrase_with_unexpected_twist: str")
-
 def safe_int(value, default=0):
     try:
         return int(value)
@@ -195,11 +146,6 @@ def safe_int(value, default=0):
 
 def str_to_type(type_str: str):
     return getattr(builtins, type_str, None)  
-
-
-
-T = TypeVar("T")
-
 
 
 T = TypeVar("T")

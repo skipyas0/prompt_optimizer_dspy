@@ -1,15 +1,13 @@
 import os
 import time
-import dspy
 
 if __name__ == "__main__":
     # env setup
-    stamp = "lamarck-with-encoding"#round(time.time() % 31536000)
+    stamp = round(time.time() % 31536000)
     folder = f"runs/{stamp}"
 
-    os.environ["OPTIM_LM"] = "gpt-4o-mini"
-    os.environ["SOLVE_LM"] = "gpt-4o-mini"
-    os.environ["OPTIM_OP"] = "ITERATIVE"
+
+    os.environ["OPTIM_OP"] = "REFLECTIVE"
     os.environ['RUN_FOLDER'] = folder
     
     import utils
@@ -18,11 +16,8 @@ if __name__ == "__main__":
     from optimizer import Optimizer
     from data import Data
 
-    optim_lm = utils.get_lm("OPTIM")
-    dspy.configure(lm=optim_lm)
-
-    data = Data.from_json("datasets/sequence_bench_quad_alt_rec_mod.json")
+    data = Data.from_json("archive/seq.json", "int")
     optim = Optimizer(data)
     optim.begin(initial_population)
-    #optim.eval()
+    optim.eval()
     
