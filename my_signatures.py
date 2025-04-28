@@ -123,27 +123,6 @@ class Signature:
             if key not in outputs:
                 return False
         return True
-    
-lamarckian = Signature(
-    [Field("task_examples", list, "")],
-    [Field("prompt_proposal", str, "")],
-    textwrap.dedent("""\
-    Your supervisor tasked you with **generating a prompt** for a Large Language Model.
-    Given several task examples, design a suitable zero-shot prompt for a Large Language Model for that task.
-    Before you create your prompt, **reflect** on these questions:
-    - What is the nature of the task?
-    - How general/specific should your prompt be?
-    - Do the task examples belong to the same category or do you see any variations?
-    - What type if thinking is necessary for solving the problem?
-    - Would your prompt benefit from including examples of the problem?
-    - *IMPORTANT* Where will the question be inserted into your prompt? *HINT*: Only use a single pair of brackets '{}' in your prompt.
-    - Can you make a step-by-step guide for solving the problem?
-    - How would you solve the problem?
-    - How can I give my own twist to the prompt so that it is **interesting** to the reader? 
-    Having reflected on these questions, **design your prompt**. 
-    Keep in mind to only **exactly** one pair of brackets '{}' in your prompts to indicate where the question should be inserted.
-    """)
-)
 
 reflective1 = Signature(
     [
@@ -193,6 +172,7 @@ iterative = Signature(
     textwrap.dedent("""\
     Craft a new prompt for an LLM
     
+    You are an intelligent pattern continuation function capable of advanced reasoning and prompt synthesis.
     You are given a given a history of past prompts along with their scores.
     They are listed in ascending order of fitness.
     Follow the sequence and design an improved prompt. 
@@ -312,7 +292,7 @@ lamarckian6 = Signature(
     """)
 )
 
-mutation = Signature(
+paraphrase = Signature(
     [Field("input_prompt", str, "")],
     [Field("prompt_proposal", str, "")],
     textwrap.dedent("""\
@@ -323,5 +303,53 @@ mutation = Signature(
     - Imagine you are writing a story and change the prompt to fit the narrative.
     - Add some of your reasoning to the prompt, particularly if the prompt includes examples where the answer is provided without explanation.
     Try to be original so that your prompt is fresh and interesting while still having all the instructional value.
+    """)
+)
+
+compare = Signature(
+    [Field("task_question", str, ""),Field("prompt_a", str, ""), Field("output_a", str, ""),Field("prompt_b", str, ""), Field("output_b", str, "")],
+    [Field("output_comparison", str, ""), Field("prompt_comparison", str, ""), Field("verdict", str, "")],
+    textwrap.dedent("""\
+    Compare performance of two prompts on a task.
+                    
+    You are an intelligent examiner capable of comparing two prompts and their outputs.
+    You are given a task question and two prompts, "prompt_a" and "prompt_b", with their outputs.
+    Follow these steps:
+        1 - Understand the task question and think about how you would solve it.
+        2 - Look at the outputs of both prompts and compare them.
+        3 - Look at the prompts, understand their structure and how they relate to the outputs.
+        4 - Write a detailed critique of the two prompts while reflecting on how they influence the outputs.
+        5 - Make a final verdict on which prompt is better. Fill the "verdict" field with either "prompt_a" or "prompt_b".
+""")
+)
+
+feedback = Signature(
+    [Field("base_prompt", str, ""),
+    Field("comparisons", list, "")],
+    [Field("prompt_proposal", str, "")],
+    textwrap.dedent("""\
+        Improve a prompt for an LLM.
+
+        You are an intelligent critique synthesis function capable of advanced reasoning. 
+        You are given a base prompt and a list of comparisons between the base prompt and other prompts.
+        Some other prompts are better than the base prompt, some are worse.
+        Your task is to analyze the comparisons and synthesize a new prompt that incorporates the feedback.
+        """)
+)
+
+lamarckian6 = Signature(
+    [Field("task_examples", list, "Samples from a problem class"), Field("focus", list, "Values to focus on")],
+    [Field("prompt_proposal", str, "Instructions for solving the problem")],
+    textwrap.dedent("""\
+    Craft **general** developer prompt to help an LLM with solving a class of problems.
+    
+    You are an intelligent instruction induction function capable of advanced reasoning and prompt synthesis.
+    Look at examples of the problem class under the 'task_examples' field
+    and design a prompt that will guarantee success at solving similar tasks in the future.
+    Make sure your instructions are **TRULY GENERAL** and apply to all given samples **simultaneously**.
+
+    Use markdown formatting in you final answer to indicate bullet points and whatever else necessary.
+    
+    In the final answer, do not include a title or any additional data, just the prompt.
     """)
 )

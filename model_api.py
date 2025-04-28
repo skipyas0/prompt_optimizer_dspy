@@ -71,21 +71,25 @@ class ModelAPI:
         logger.debug(f"Getting completion\n{str(completion)}")
         return completion
 
-    def predict(self, signature: Signature, temp=None, developer_prompt=None, max_tries=1, **kwargs):
+    def predict(self, signature: Signature, temp=None, developer_prompt=None, max_tries=10, **kwargs):
         if temp is None:
             temp = self.temp
+        
+        if os.getenv("DEBUG") is not None:
+            return {k: "test" for k,_ in signature.as_dict()["outputs"].items()}
+        
         if developer_prompt is None:
             developer_prompt = textwrap.dedent(
                 """\
                 You are an intelligent function that returns structured JSON outputs matching a given schema.
 
                 - You will receive a JSON object containing:
-                    - `instructions`: a task or question to answer
                     - `inputs`: a dictionary of named inputs
                     - `outputs`: a dictionary specifying the expected output fields with their types and descriptions
+                    - `instructions`: a task or question to answer (optional)
 
                 Your job is to:
-                    1. Understand the task from `instructions`
+                    1. Understand the task from `instructions` or infer it from `inputs` and `outputs`
                     2. Use the `inputs` to compute or generate the answer
                     3. Respond **only** with keys from the `outputs` dictionary and values matching the described types
 

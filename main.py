@@ -7,15 +7,18 @@ if __name__ == "__main__":
     folder = f"runs/{stamp}"
 
 
-    os.environ["OPTIM_OP"] = "REFLECTIVE"
+    os.environ["OPTIM_OP"] = "FEEDBACK"
     os.environ['RUN_FOLDER'] = folder
-    
+    os.environ['GRADING_FUNCTION'] = "compare"
+    #os.environ["DEBUG"] = ""
+
     import utils
     initial_population = utils.check_and_load_population(folder)
 
     from optimizer import Optimizer
     from data import Data
 
+    #data = Data.from_json("datasets/limericks.json", "str")
     data = Data.from_json("archive/seq.json", "int")
     optim = Optimizer(data)
     optim.begin(initial_population)

@@ -2,6 +2,7 @@ import logging
 import os
 import re
 from typing import Literal
+import uuid
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -10,8 +11,6 @@ handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
-
-CREATIVE_TEMP = 0.75
 
 
 class Prompt:
@@ -31,8 +30,10 @@ class Prompt:
         self.valid = self.__valid()
         self.__dev_score = -1.0 if self.valid else 0.0
         self.__test_score = -1.0 if self.valid else 0.0
-        self.completions = []
         self.active = active
+        self.id = uuid.uuid4().hex
+        self.attempts = []
+        self.comparisons = []
 
     def __valid(self) -> bool:
         """
@@ -61,25 +62,16 @@ class Prompt:
     def format(self, s: str) -> str:
         return self.text.format(s)
 
-    def get_completion(self, grade: Literal[0, 1]):
-        if len(self.completions) == 0:
-            return None
-        try:
-            # get a wrong completion
-            completion = next(filter(lambda c: c[3] == grade, self.completions))
-        except StopIteration:
-            # get any completion
-            completion = self.completions[-1]
-        return completion
-
-    def jsoned(self) -> dict:
+    def to_dict(self) -> dict:
         return {
+            "id": self.id,
             "gen": self.gen,
             "prompt": str(self),
             "dev_score": self.__dev_score,
             "test_score": self.__test_score,
             "origin": self.origin,
             "active": self.active,
+            "comparisons": self.comparisons,
         }
 
     @classmethod
@@ -87,8 +79,9 @@ class Prompt:
         p = Prompt(
             prompt["prompt"], "", prompt["gen"], prompt["origin"], prompt["active"]
         )
-        p.__dev_score = prompt["dev_score"]
-        p.__test_score = prompt["test_score"]
+        #p.__dev_score = prompt["dev_score"]
+        #p.__test_score = prompt["test_score"]
+        p.comparisons = prompt.get("comparisons", [])
         return p
 
     def score_to_count(self) -> int:
@@ -107,10 +100,29 @@ class Prompt:
 
     def set_score(self, split: Literal["dev", "test"], score):
         old_score = self.get_score(split)
-        if old_score == -1.0:
-            if split == "dev":
-                self.__dev_score = score
-            else:
-                self.__test_score = score
+        print(f"Setting score {score} for {self.text} on {split} from {old_score}")
+
+        if split == "dev":
+            self.__dev_score = score
         else:
-            raise ValueError(f"Prompt already has score {old_score}")
+            self.__test_score = score
+
+    def update_comparisons(self, comparison):
+        comparison = comparison.copy()
+        winner = (
+                comparison["prompt_a"]
+                if comparison["verdict"] == "prompt_a"
+                else comparison["prompt_b"]
+            )
+        comparison["verdict"] = winner == self.id
+        self.comparisons.append(comparison)
+        dev_comps = [
+            c for c in self.comparisons if c["split"] == "dev" 
+        ]
+        if len(dev_comps) > 0:
+            self.set_score("dev", sum([c["verdict"] for c in dev_comps]) / len(dev_comps))
+        test_comps = [
+            c for c in self.comparisons if c["split"] == "test"
+        ]
+        if len(test_comps) > 0:
+            self.set_score("test", sum([c["verdict"] for c in test_comps]) / len(test_comps))

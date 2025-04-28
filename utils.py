@@ -87,18 +87,12 @@ def check_and_load_population(folder: str) -> list:
         os.mkdir(folder)
     return initial_population
 
-def deseparate_into_lists(string, sep1=',', sep2=';'):
+def sep_norm_sort(string, sep1=',', sep2=';'):
     if hasattr(string, "split"):
-        return [s.split(sep1) for s in string.split(sep2)]
+        return [sorted([ss.strip().lower() for ss in s.split(sep1)]) for s in string.split(sep2)]
     return None            
     
 
-def recursive_string_normalize(inp: str | list):
-    if isinstance(inp, list):
-        return [recursive_string_normalize(subinp) for subinp in inp]
-    if isinstance(inp, str):
-        return inp.strip().lower()
-    return None
 
 def execute_code(raw_code: str) -> str:
     parts = raw_code.split('```')
