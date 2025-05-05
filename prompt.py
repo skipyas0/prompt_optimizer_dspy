@@ -12,76 +12,67 @@ formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+PLACEHOLDER = '<INSERT TASK QUESTION HERE>'
 
 class Prompt:
     def __init__(
         self,
-        prefix: str,
-        suffix: str = "",
+        text: str,
         gen: int = 0,
         origin: str = "unknown",
         active: bool = True,
+        id: str = None
     ):
-        self.prefix = prefix
-        self.suffix = suffix
-        self.text = prefix + suffix
+        self.text = text
         self.gen = gen
         self.origin = origin
-        self.valid = self.__valid()
+        self.valid = True
+        self.sanitize()
         self.__dev_score = -1.0 if self.valid else 0.0
         self.__test_score = -1.0 if self.valid else 0.0
         self.active = active
-        self.id = uuid.uuid4().hex
+        self.id = uuid.uuid4().hex if id is None else id
         self.attempts = []
         self.comparisons = []
 
-    def __valid(self) -> bool:
+    def sanitize(self) -> bool:
         """
         Sanitize prompt and return if it's valid
         Valid prompts do not have additional formatting brackets.
         """
-        sanitized = re.sub("{.*?}", "{}", self.text)
-        brackets_left = len(re.findall("{.*?}", str(sanitized)))
-        if brackets_left == 1:
-            self.text = sanitized
-            valid = True
-        elif brackets_left == 0:
-            self.text = self.prefix + "{}" + self.suffix
-            valid = True
-        else:
-            valid = False
-        self.text = self.text.replace('"', "")
-        valid = valid and len(re.findall("{[^}]|[^{]}", str(self.text))) == 0
-        if not valid:
-            logger.warning(f"Prompt '{self.text}' is invalid")
-        return valid
+        count = self.text.count(PLACEHOLDER)
+        if count == 0:
+            logger.warning(f"Prompt {self.text} does not contain {PLACEHOLDER}")
+            self.text = self.text + PLACEHOLDER
+        elif count > 1:
+            logger.warning(f"Prompt {self.text} contains multiple {PLACEHOLDER}")
+            self.text = self.text.replace(PLACEHOLDER, "", count-1)
+        
 
     def __str__(self) -> str:
         return self.text
 
     def format(self, s: str) -> str:
-        return self.text.format(s)
+        return self.text.replace(PLACEHOLDER, s)
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "gen": self.gen,
-            "prompt": str(self),
+            "prompt": self.text,
             "dev_score": self.__dev_score,
             "test_score": self.__test_score,
             "origin": self.origin,
             "active": self.active,
-            "comparisons": self.comparisons,
         }
 
     @classmethod
     def from_json(cls, prompt: dict):
         p = Prompt(
-            prompt["prompt"], "", prompt["gen"], prompt["origin"], prompt["active"]
+            prompt["prompt"], prompt["gen"], prompt["origin"], prompt["active"], prompt["id"]
         )
-        #p.__dev_score = prompt["dev_score"]
-        #p.__test_score = prompt["test_score"]
-        p.comparisons = prompt.get("comparisons", [])
+        p.__dev_score = prompt["dev_score"]
+        p.__test_score = prompt["test_score"]
         return p
 
     def score_to_count(self) -> int:

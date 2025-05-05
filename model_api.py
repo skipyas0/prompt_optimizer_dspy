@@ -71,7 +71,7 @@ class ModelAPI:
         logger.debug(f"Getting completion\n{str(completion)}")
         return completion
 
-    def predict(self, signature: Signature, temp=None, developer_prompt=None, max_tries=10, **kwargs):
+    def predict(self, signature: Signature, temp=None, developer_prompt=None, max_tries=25, **kwargs):
         if temp is None:
             temp = self.temp
         
@@ -128,7 +128,7 @@ class ModelAPI:
             try:
                 completion = self.forward(messages=msgs, temp=temp)
             except openai.BadRequestError as e:
-                print(f"WARNING: openai.BadRequestError for: {msgs}")
+                logger.warning(f"openai.BadRequestError for: {msgs}")
                 completion = {
                     "error": "openai.BadRequestError",
                     "choices": [{"message": {"content": str(e)}}],
@@ -136,19 +136,14 @@ class ModelAPI:
     
             content = completion.choices[0].message.content
             try:
-                # start = content.index("{")
-                # end = content.rindex("}") + 1
-                # json_str = content[start:end]
-                # json_str = json_str.replace("\\n", "").strip()
-                # json_str = json_str.replace("\\", "\\\\")  # Escape backslashes
-                json_obj = extract_json_block(content)
+                json_obj = extract_json_block(content, signature.mandatory_outputs())
                 ret_attempt = dict(json_obj)
                 assert signature.matches_output(
                     ret_attempt
                 ), f"LLM JSON response {ret} does not match the desired outputs {signature.mandatory_outputs()}"
                 ret = ret_attempt
             except Exception as e:
-                print(f"WARNING: JSON response parsing error for {content}: {str(e)}")
+                logger.warning(f"JSON response parsing error for {content}: {str(e)}")
             tries += 1
         return ret
     
@@ -162,7 +157,7 @@ class ModelAPI:
         return response["answer"]
 
     def chain_of_thought(
-        self, signature: Signature, temp=None, **kwargs
+        self, signature: Signature, temp=None, max_tries=10, **kwargs
     ) -> tuple[str, dict]:
         if temp is None:
             temp = self.temp
@@ -177,7 +172,7 @@ class ModelAPI:
             ]
         )
 
-        ret = self.predict(signature, temp=temp, **kwargs)
+        ret = self.predict(signature, temp=temp, max_tries=max_tries, **kwargs)
         if ret is None:
             return None, None
         reasoning = ret.pop("reasoning")
@@ -642,21 +637,20 @@ class ModelAPI:
         answer = self.predict(signature, **kwargs)
         return [node.get_thought_chain() for node in solution_nodes], answer
 
+def extract_json_blob(text: str, required_fields) -> str:
+    candidates = re.findall(r'\{.*?\}', text, re.DOTALL)
 
-def extract_json_block(text):
-    # Remove any outer quotation marks if they wrap the entire content
-    if (text.startswith("'") and text.endswith("'")) or \
-       (text.startswith('"') and text.endswith('"')):
-        text = text[1:-1]
-    
-    code_block_pattern = r'```(?:json)?\s*(.*?)\s*```'
-    match = re.search(code_block_pattern, text, re.DOTALL)
-    
-    if match:
-        json_content = match.group(1)
-    else:
-        json_content = text
- 
+    for candidate in candidates:
+        if all(f'"{field}"' in candidate for field in required_fields):
+            return candidate
+    return None
+
+
+def extract_json_block(text, required_fields):
+    json_content = extract_json_blob(text, required_fields)
+    if json_content is None:
+        logger.warning(f"Could not find JSON block in text: {text}")
+        return None
     # Consistent new-lines
     json_content = json_content.replace(r'\\n', r'__ESCAPED_NEWLINE__')
     json_content = json_content.replace(r'\n', r'')
@@ -666,19 +660,27 @@ def extract_json_block(text):
     json_content = json_content.replace("\\'", "'")
     json_content = re.sub(r'\\{2}"', r'\\"', json_content)
     json_content = re.sub(r'\\{4}', r'\\\\', json_content)
-    
+
+    code_block = re.search(r'```python(.*?)```', json_content, re.DOTALL)
+    code = None
+    if code_block:
+        code = code_block.group(1)
+        json_content = json_content.replace(code_block.group(0), "null")
+
     try:
-        return json.loads(json_content)
+        data = json.loads(json_content)
+        if code is not None:
+            data["solution"] = code
+        return data
     except json.JSONDecodeError as e:
-        print(f"Error parsing JSON after cleanup: {e}")
-        print(f"Problem occurred at position {e.pos}")
-        print(json_content)
-        return None
+        logger.warning(f"Error parsing JSON after cleanup: {e} at position {e.pos}\nContent: {json_content}")
+
+    return None
 
 model = ModelAPI()
 
 if __name__ == "__main__":
     with open("forward.txt", "r") as f:
         a = f.read()
-    js = extract_json_block(a)
-    print(js)
+    js = extract_json_block(a, ["reasoning", "solution"])
+    print(js["solution"])

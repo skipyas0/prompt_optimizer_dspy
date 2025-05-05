@@ -7,6 +7,7 @@ import logging
 import Levenshtein
 import my_signatures as sig
 from model_api import model
+import math
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -22,6 +23,7 @@ class Population:
         self.prompts: list[Prompt] = prompts
         self.avg_score, self.max_score = -1.0, -1.0
         self.ranked = False
+        self.comparisons = []
 
     def get_by_id(self, id: str) -> Prompt | None:
         """
@@ -31,7 +33,7 @@ class Population:
             if prompt.id == id:
                 return prompt
         return None
-    
+
     def add(self, prompts: Prompt | list[Prompt]) -> None:
         if isinstance(prompts, Prompt):
             prompts = [prompts]
@@ -64,12 +66,16 @@ class Population:
                     random.shuffle(prompts)
                     prompt_a, prompt_b = prompts[0], prompts[1]
                     self.compare_prompts(prompt_a, prompt_b, task, split)
-        #self.normalize_scores(split)
+        # self.normalize_scores(split)
 
     def compare_prompts(self, prompt_a, prompt_b, task, split):
         logger.debug(f"Comparing {prompt_a.id} and {prompt_b.id} on task {task.id}")
-        attempt_a = [a for a in prompt_a.attempts if a.example_id == task.id][-1]
-        attempt_b = [a for a in prompt_b.attempts if a.example_id == task.id][-1]
+        try:
+            attempt_a = [a for a in prompt_a.attempts if a.example_id == task.id][-1]
+            attempt_b = [a for a in prompt_b.attempts if a.example_id == task.id][-1]
+        except Exception as e:
+            logger.warning(f"Comparison failed, no attempts available: {e}")
+
         _, comparison = model.chain_of_thought(
             sig.compare,
             task_question=task.qa_dict(),
@@ -97,12 +103,13 @@ class Population:
         }
         prompt_a.update_comparisons(comparison_log)
         prompt_a.update_comparisons(comparison_log)
+        self.comparisons.append(comparison_log)
         if verdict == "prompt_a":
-            #prompt_a.set_score(split, prompt_a.get_score(split) + 1)
+            # prompt_a.set_score(split, prompt_a.get_score(split) + 1)
             attempt_a.grade = 1
             attempt_b.grade = 0
         elif verdict == "prompt_b":
-            #prompt_b.set_score(split, prompt_b.get_score(split) + 1)
+            # prompt_b.set_score(split, prompt_b.get_score(split) + 1)
             attempt_a.grade = 0
             attempt_b.grade = 1
         else:
@@ -128,7 +135,20 @@ class Population:
     def select(self, n: int) -> list[Prompt]:
         if n >= len(self.prompts):
             return self.prompts
-        counts = [p.score_to_count() for p in self.prompts]
+        scores = [p.get_score("dev") for p in self.prompts]
+
+        def softmax_like(score):
+            if score < 0.0:
+                return 0
+            elif score == 0.0:
+                return 1
+            elif score >= 1.0:
+                return 10
+            else:
+                return 1 + (score * 9)
+
+        counts = [math.floor(softmax_like(score)) for score in scores]
+        print(f"Selecting {n} prompts with counts {counts} from {len(self.prompts)}")
         return random.sample(self.prompts, n, counts=counts)
 
     def stats(self) -> tuple[float, float]:
@@ -145,6 +165,11 @@ class Population:
             for prompt in self.prompts:
                 json.dump(prompt.to_dict(), f)
                 f.write("\n")
+        if len(self.comparisons) > 0:
+            with open(
+                f"{os.getenv('RUN_FOLDER')}/comparisons.json", "w", encoding="utf-8"
+            ) as f:
+                json.dump(self.comparisons, f)
 
     def __len__(self):
         return len(self.prompts)
@@ -158,9 +183,9 @@ class Population:
             list(filter(lambda p: p.gen == i, self.prompts)) for i in range(max_gen + 1)
         ]
 
-    def test_iterations(self, data: Data) -> list[list[float]]:
+    def test_iterations(self, data: Data, phase="optim") -> list[list[float]]:
         scores_by_gen = [
-            [data.eval_on_batch(prompt, data.test) for prompt in gen]
+            [data.eval_on_batch(prompt, data.test, phase=phase) for prompt in gen]
             for gen in self.filter_by_iteration()
             if len(gen) > 0
         ]
@@ -174,7 +199,7 @@ class Population:
 
     def purge_worst(self) -> int:
         """
-        Remove the worst quarter (1/4) of prompts from the population.
+        Remove the worse half of prompts from the population.
         Begins new generation.
 
         Args:
@@ -184,7 +209,7 @@ class Population:
             int: How many were purged
         """
         self.dump()
-        purged = max(min(len(self) // 4, 10), 1)
+        purged = max(min(len(self) // 2, 10), 1)
         for i in range(purged):
             logger.info(f"PURGE WORST ({i}): {self.prompts[-1].text}")
             self.prompts[-1].active = False
@@ -193,7 +218,7 @@ class Population:
 
     def purge_duplicates(self) -> int:
         """
-        After sorting by score, go prompt by prompt and remove the most similar prompt until a quarter (1/4) of the population is deleted.
+        After sorting by score, go prompt by prompt and remove the most similar prompt until a half of the population is deleted.
         Begins new generation.
 
         Args:
@@ -208,7 +233,7 @@ class Population:
             self.prompts.pop()
             return 1
 
-        purged = max(min(len(self) // 4, 10), 1)  # clip(pop//4, 1, 10)
+        purged = max(min(len(self) // 2, 10), 1)  # clip(pop//4, 1, 10)
         for i in range(purged):
             curr = self[i]
             most_similar = sorted(
