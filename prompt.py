@@ -21,39 +21,43 @@ class Prompt:
         gen: int = 0,
         origin: str = "unknown",
         active: bool = True,
-        id: str = None
+        id: str = None,
+        placeholder: str = PLACEHOLDER,
     ):
         self.text = text
         self.gen = gen
         self.origin = origin
         self.valid = True
-        self.sanitize()
         self.__dev_score = -1.0 if self.valid else 0.0
         self.__test_score = -1.0 if self.valid else 0.0
         self.active = active
         self.id = uuid.uuid4().hex if id is None else id
         self.attempts = []
         self.comparisons = []
+        self.placeholder = placeholder
+        self.sanitize()
 
     def sanitize(self) -> bool:
         """
         Sanitize prompt and return if it's valid
         Valid prompts do not have additional formatting brackets.
         """
-        count = self.text.count(PLACEHOLDER)
-        if count == 0:
-            logger.warning(f"Prompt {self.text} does not contain {PLACEHOLDER}")
-            self.text = self.text + PLACEHOLDER
-        elif count > 1:
-            logger.warning(f"Prompt {self.text} contains multiple {PLACEHOLDER}")
-            self.text = self.text.replace(PLACEHOLDER, "", count-1)
+        print(self.__dict__)
+        if self.placeholder is not None:
+            count = self.text.count(self.placeholder)
+            if count == 0:
+                logger.warning(f"Prompt {self.text} does not contain {self.placeholder}")
+                self.text = self.text + self.placeholder
+            elif count > 1:
+                logger.warning(f"Prompt {self.text} contains multiple {self.placeholder}")
+                self.text = self.text.replace(self.placeholder, "", count-1)
         
 
     def __str__(self) -> str:
         return self.text
 
     def format(self, s: str) -> str:
-        return self.text.replace(PLACEHOLDER, s)
+        return self.text if self.placeholder is None else self.text.replace(self.placeholder, s)
 
     def to_dict(self) -> dict:
         return {

@@ -31,12 +31,17 @@ def test_code(solution, gold, logger=None):
     score = 0
     for gold_input, gold_output in zip(gold_inputs, gold_outputs):
         out = utils.execute_code(solution, gold_input)
-        if out is not str or "Exception:" in out:
+        #print(out, type(out))
+        if not isinstance(out, str) or "Exception:" in out:
+            #print("Exception in code execution")
             continue
         elif out == gold_output:
+            #print("Correct output")
             score += 1
         else:
+            #print("Wrong output, partial credit")
             score += 0.1 # successful execution but wrong output
+    #print("Final score:", score)
     return score / len(gold_inputs)
 
 if __name__ == "__main__":

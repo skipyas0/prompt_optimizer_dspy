@@ -21,17 +21,19 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
+
+    
 class ModelAPI:
-    def __init__(self, temp=0.75, api_key=None, identifier=None, logging=True) -> None:
+    def __init__(self, temp=0.75, api_key=None, identifier=None, logging=True, models = ["google/gemma-3-27b-it:free","google/gemma-3-27b-it"]) -> None:
         self.temp = temp
         self.identifier = identifier
         load_dotenv()
         port = os.getenv("VLLM_MY_PORT")
-        api_key = api_key if api_key else os.getenv("API_KEY_UNIVERSAL")
         self.logging = logging
+        api_key = api_key or os.getenv("OPENROUTER")
         if port:
             # hosted locally
-            self.model = ""
+            self.model = models[0]
             self.client = openai.OpenAI(
                 base_url=f"http://localhost:{port}/v1",
                 api_key="EMPTY",
@@ -40,17 +42,18 @@ class ModelAPI:
             # hosted on openai
             #self.model = "gpt-4o-mini"
             #self.client = openai.OpenAI(api_key=api_key)
-            self.model = "google/gemma-3-27b-it:free"
-            self.fallback = ["google/gemma-3-27b-it"]
+            self.model = models[0]
+            self.fallback = models[1:]
             self.client = openai.OpenAI(
                 base_url="https://openrouter.ai/api/v1",
-                api_key=os.getenv("OPENROUTER"))
+                api_key=api_key)
         else:
             raise ValueError("No API key or port specified")
         logger.info(
             f"ModelAPI initialized with temp={temp}, api_key={api_key}, identifier={identifier}, logging={logging}"
         )
-
+        self.prompt_token_acc = 0
+        self.completion_token_acc = 0
     def forward(self, messages, temp=None):
         #with open("forward.json", "w+") as f:
         #    json.dump(messages, f)
@@ -65,12 +68,22 @@ class ModelAPI:
             messages=messages,
             temperature=temp,
             n=1,
+            max_completion_tokens=2000
         )
         #with open("completion.json", "w+") as f:
         #    json.dump(completion.choices[0].message.content, f)
         logger.debug(f"Getting completion\n{str(completion)}")
+        self.prompt_token_acc += completion.usage.prompt_tokens
+        self.completion_token_acc += completion.usage.completion_tokens
         return completion
-
+    
+    def token_checkpoint(self, name="checkpoint"):
+        logger.info(
+            f"Token checkpoint: {name} - Prompt tokens: {self.prompt_token_acc}, Completion tokens: {self.completion_token_acc}"
+        )
+        self.prompt_token_acc = 0
+        self.completion_token_acc = 0
+    
     def predict(self, signature: Signature, temp=None, developer_prompt=None, max_tries=25, **kwargs):
         if temp is None:
             temp = self.temp
@@ -117,24 +130,37 @@ class ModelAPI:
     
             for k, v in kwargs.items():
                 signature_dict["inputs"][k] = v
+
+            content = [
+                {"type": "text", "text": f"{json.dumps(signature_dict)}"}]
+            
+            images = []
+            for i in signature.input_fields:
+                print(f"Signature input {i.name} type {i.type.__name__}")
+                if i.type.__name__ == "imageurl":
+                    images.append({"type": "image_url", "image_url": f"{signature_dict['inputs'][i.name]}"}) 
+            content = content[0]["text"] if len(images) == 0 else images + content
+            
             msgs = [
                 {
                     "role": "developer",
                     "content": developer_prompt,
                 },
-                {"role": "user", "content": json.dumps(signature_dict)},
+                {"role": "user", "content": content},
             ]
     
             try:
                 completion = self.forward(messages=msgs, temp=temp)
-            except openai.BadRequestError as e:
-                logger.warning(f"openai.BadRequestError for: {msgs}")
-                completion = {
-                    "error": "openai.BadRequestError",
-                    "choices": [{"message": {"content": str(e)}}],
-                }
+                if completion.choices is None or len(completion.choices) == 0:
+                    raise ValueError(f"Empty completion {completion}")
+            except (openai.BadRequestError, ValueError) as e:
+                logger.error(f"Forward error: ({e}) for: {msgs}")
+                continue
     
             content = completion.choices[0].message.content
+            if isinstance(content, list) and len(content) == 1 and isinstance(content[0], dict) and "text" in content[0]:
+                logger.warning("Completion had 'type' field")
+                content = content[0]["text"]
             try:
                 json_obj = extract_json_block(content, signature.mandatory_outputs())
                 ret_attempt = dict(json_obj)
@@ -651,19 +677,24 @@ def extract_json_block(text, required_fields):
     if json_content is None:
         logger.warning(f"Could not find JSON block in text: {text}")
         return None
-    # Consistent new-lines
-    json_content = json_content.replace(r'\\n', r'__ESCAPED_NEWLINE__')
-    json_content = json_content.replace(r'\n', r'')
-    json_content = json_content.replace(r'__ESCAPED_NEWLINE__', r'\\n')
+    logger.debug(f"Extracted JSON block: {json_content}")
 
     # Other invalid escapes
-    json_content = json_content.replace("\\'", "'")
-    json_content = re.sub(r'\\{2}"', r'\\"', json_content)
-    json_content = re.sub(r'\\{4}', r'\\\\', json_content)
+    # json_content = json_content.replace("\\'", "'")
+    # json_content = re.sub(r'\\{2}"', r'\\"', json_content)
+    # json_content = re.sub(r'\\{4}', r'\\\\', json_content)
+
+    def replacer(match):
+        content = match.group(0)
+        return content.replace('\n', '\\n').replace('\r', '\\r')
+
+    # Only apply to quoted strings (naive but works 90% of the time)
+    json_content = re.sub(r'"(?:[^"\\]|\\.)*"', replacer, json_content)
 
     code_block = re.search(r'```python(.*?)```', json_content, re.DOTALL)
     code = None
     if code_block:
+        logger.debug(f"Found code block: {code_block.group(0)}")
         code = code_block.group(1)
         json_content = json_content.replace(code_block.group(0), "null")
 
@@ -677,10 +708,18 @@ def extract_json_block(text, required_fields):
 
     return None
 
-model = ModelAPI()
+
+solve_model = ModelAPI(
+    temp=0.0,
+)
+
+optim_model = ModelAPI(
+    temp=0.75,
+)
+
 
 if __name__ == "__main__":
-    with open("forward.txt", "r") as f:
+    with open("inp.txt", "r") as f:
         a = f.read()
-    js = extract_json_block(a, ["reasoning", "solution"])
-    print(js["solution"])
+    js = extract_json_block(a, ["reasoning", "prompt_proposal"])
+    print(js["prompt_proposal"])

@@ -6,8 +6,9 @@ import random
 import logging
 import Levenshtein
 import my_signatures as sig
-from model_api import model
+from model_api import optim_model
 import math
+import numpy as np
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -76,14 +77,25 @@ class Population:
         except Exception as e:
             logger.warning(f"Comparison failed, no attempts available: {e}")
 
-        _, comparison = model.chain_of_thought(
-            sig.compare,
-            task_question=task.qa_dict(),
-            prompt_a=prompt_a.text,
-            prompt_b=prompt_b.text,
-            output_a=attempt_a.as_cot(),
-            output_b=attempt_b.as_cot(),
-        )
+        if split is None: # this is an imageurl task:
+            split = "dev"
+            _, comparison = optim_model.chain_of_thought(
+                sig.image_compare,
+                description=task.question,
+                prompt_a=prompt_a.text,
+                prompt_b=prompt_b.text,
+                output_a=attempt_a.answer,
+                output_b=attempt_b.answer,
+            )
+        else:
+            _, comparison = optim_model.chain_of_thought(
+                sig.compare,
+                task_question=task.qa_dict(),
+                prompt_a=prompt_a.text,
+                prompt_b=prompt_b.text,
+                output_a=attempt_a.as_cot(),
+                output_b=attempt_b.as_cot(),
+            )
 
         output_comp = comparison["output_comparison"]
         prompt_comp = comparison["prompt_comparison"]
@@ -102,7 +114,7 @@ class Population:
             "verdict": verdict,
         }
         prompt_a.update_comparisons(comparison_log)
-        prompt_a.update_comparisons(comparison_log)
+        prompt_b.update_comparisons(comparison_log)
         self.comparisons.append(comparison_log)
         if verdict == "prompt_a":
             # prompt_a.set_score(split, prompt_a.get_score(split) + 1)
@@ -211,7 +223,7 @@ class Population:
         self.dump()
         purged = max(min(len(self) // 2, 10), 1)
         for i in range(purged):
-            logger.info(f"PURGE WORST ({i}): {self.prompts[-1].text}")
+            logger.info(f"PURGE WORST ({i}): {self.prompts[-1].id}")
             self.prompts[-1].active = False
             self.prompts.pop()
         return purged
@@ -229,18 +241,40 @@ class Population:
         """
         self.dump()
 
-        if len(self) == 1:
-            self.prompts.pop()
+        n = len(self.prompts)
+        if n <= 1:
+            self.prompts.clear()
             return 1
 
         purged = max(min(len(self) // 2, 10), 1)  # clip(pop//4, 1, 10)
-        for i in range(purged):
-            curr = self[i]
-            most_similar = sorted(
-                self.prompts[i + 1 :],
-                key=lambda p: Levenshtein.distance(curr.text, p.text),
-            )[0]
-            most_similar.active = False
-            self.prompts.remove(most_similar)
-            logger.info(f"PURGE DUPLICATES ({i}): {most_similar.text}")
+
+        sim_matrix = np.zeros((n, n))
+        for i in range(n):
+            for j in range(i + 1, n):
+                r = Levenshtein.ratio(self.prompts[i].text, self.prompts[j].text)
+                sim_matrix[i, j] = r
+                sim_matrix[j, i] = r
+
+        to_purge = set()
+        used = set()
+
+        for _ in range(purged):
+            # Find most similar remaining pair
+            best = (-1, -1, -1)  # (sim, i, j)
+            for i in range(n):
+                if i in used:
+                    continue
+                for j in range(i + 1, n):
+                    if j in used:
+                        continue
+                    sim = sim_matrix[i, j]
+                    if sim > best[0]:
+                        best = (sim, i, j)
+            _, i, j = best
+            # Mark one of the pair for purging (e.g. j)
+            to_purge.add(j)
+            used.add(j)
+        for i in sorted(to_purge, reverse=True):
+            p = self.prompts.pop(i)
+            logger.info(f"PURGE DUPLICATES ({i}): {p.id}")
         return purged

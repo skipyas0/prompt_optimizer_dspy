@@ -4,10 +4,9 @@ from prompt import Prompt
 from population import Population
 import matplotlib.pyplot as plt
 import random
-import Levenshtein
 from data import Data, Example
 import my_signatures as sig
-from model_api import model
+from model_api import optim_model, solve_model
 import json
 
 
@@ -30,11 +29,10 @@ class Optimizer:
         self.all_prompts.comparisons = initial_comparisons
 
         self.operators = {
-            "LAMARCKIAN": self.lamarckian,
+            "LAMARCKIAN": self.image_lamarckian if data.answer_type == "imageurl" else self.lamarckian,
             "REFLECTIVE": self.reflective,
             "ITERATIVE": self.iterative,
-            "CROSSOVER": self.crossover,
-            "MUTATION": self.paraphrase,
+            "PARAPHRASE": self.paraphrase,
             "FEEDBACK": self.feedback,
         }
         self.settings = settings
@@ -53,6 +51,8 @@ class Optimizer:
             f"Split lengths: train {len(self.data.train)}, dev {len(self.data.dev)}, test {len(self.data.test)}"
         )
         self.start_batch = self.data.get_batch("dev", n=self.settings["batch_size"])
+        print(self.data.data, self.data.train, self.data.dev, self.data.test)
+        print(self.start_batch)
         
     ### TOOLS FOR PROMPT GENERATION
     def lamarckian(self, gen: int = 0, n: int = 1) -> list[Prompt]:
@@ -71,14 +71,16 @@ class Optimizer:
 
         prompts = []
         seeding_source = self.settings["seeding_source"]
+        origin = "lamarckian_no_seed" if seeding_source == "NOSEED" else "lamarckian_personas"
         for _ in range(n):
             examples = [e.qa_dict() for e in self.data.select("train", self.settings["lamarck_batch"])]
+            random.shuffle(examples)
             if seeding_source == "NOSEED":
-                _, completion = model.chain_of_thought(
+                _, completion = optim_model.chain_of_thought(
                     sig.lamarckian, task_examples=examples
                 )
             elif seeding_source == "PERSONAS":
-                _, completion = model.chain_of_thought(
+                _, completion = optim_model.chain_of_thought(
                     sig.lamarckian_personas, task_examples=examples, persona=self.random_persona()
                 )
             else:
@@ -86,13 +88,43 @@ class Optimizer:
 
 
             prompt_obj = Prompt(
-                completion["prompt_proposal"], origin="lamarckian", gen=gen
+                completion["prompt_proposal"], origin=origin, gen=gen
             )
             self.population.add(prompt_obj)
             logger.info(f"LAMARCKIAN, seed {seeding_source}, generated prompt:\n {str(prompt_obj)}\n")
             prompts.append(prompt_obj)
         return prompts
+    
+    def image_lamarckian(self, gen: int = 0, n: int = 1) -> list[Prompt]:
+        """
+        Task another component with access to the data to generate a new prompt.
+        You may provide a short hint.
 
+        Args:
+            hint (str): Specific instruction on how a new prompt should be constructed.
+            gen (int): Current generation.
+            n (int): How many times to repeat the operation
+
+        Returns:
+            None
+        """
+
+        prompts = []
+        origin = "image_lamarckian"
+        for _ in range(n):
+            examples = [e.qa_dict() for e in self.data.data]
+            _, completion = optim_model.chain_of_thought(
+                sig.image_lamarckian, description=examples[0]["question"]
+            )
+
+            prompt_obj = Prompt(
+                completion["prompt_proposal"], origin=origin, gen=gen, placeholder=None
+            )
+            self.population.add(prompt_obj)
+            logger.info(f"IMAGE LAMARCKIAN, generated prompt:\n {str(prompt_obj)}\n")
+            prompts.append(prompt_obj)
+        return prompts
+    
     def reflective(self, gen: int = 0, n: int = 1) -> list[Prompt]:
         """ """
         prompts = []
@@ -102,17 +134,19 @@ class Optimizer:
         if len(prompts_with_attempts) == 0:
             logger.warning("No prompts with attempts, using lamarckian insted of reflective")
             return self.lamarckian(gen=gen, n=n)
+        
+        
         prompts_with_attempts = sorted(
             prompts_with_attempts, key=lambda p: min([a.grade for a in p.attempts])
         )
         for _ in range(n):
-            original = prompts_with_attempts[-1]
+            original = prompts_with_attempts[0]
             solution = sorted(original.attempts, key=lambda a: a.grade)[-1]
 
             example_id = solution.example_id
             example = self.data.get_by_id(example_id)
             reasoning = solution.reasoning
-            _, completion = model.chain_of_thought(
+            _, completion = optim_model.chain_of_thought(
                 signature=sig.reflective,
                 original_prompt=original.text,
                 task_question=example.question,
@@ -153,17 +187,21 @@ class Optimizer:
                         "comparison": comp["prompt_comp"],
                     }
                 )
-            _, completion = model.chain_of_thought(
-                signature=sig.feedback,
+            signature = sig.image_feedback if self.data.answer_type == "imageurl" else sig.feedback
+            _, completion = optim_model.chain_of_thought(
+                signature=signature,
                 base_prompt=original.text,
                 comparisons=comparisons,
             )
+
             prompt_obj = Prompt(
-                completion["prompt_proposal"], origin="reflective", gen=gen
+                completion["prompt_proposal"], origin="feedback", gen=gen
             )
+            if self.data.answer_type == "imageurl":
+                prompt_obj.placeholder = None
             self.population.add(prompt_obj)
             logger.info(
-                f"REFLECTIVE generated prompt:\n {str(prompt_obj)}\nOriginal prompt:\n{original.text}\n"
+                f"FEEDBACK generated prompt:\n {str(prompt_obj)}\nOriginal prompt:\n{original.text}\n"
             )
             prompts.append(prompt_obj)
         return prompts
@@ -174,7 +212,7 @@ class Optimizer:
         for _ in range(n):
             examples = [p.prompt_and_perf() for p in self.population.select(5)]
             examples = sorted(examples, key=lambda t: t[1])
-            _, completion = model.chain_of_thought(sig.iterative, old_prompts=examples)
+            _, completion = optim_model.chain_of_thought(sig.iterative, old_prompts=examples)
             prompt_obj = Prompt(
                 completion["prompt_proposal"], origin="iterative", gen=gen
             )
@@ -185,52 +223,20 @@ class Optimizer:
             prompts.append(prompt_obj)
         return prompts
 
-    def crossover(self, gen: int = 0, n: int = 1) -> list[Prompt]:
-        """ """
-        prompts = []
-        for _ in range(n):
-            best_quartile = self.population.quartile(1)
-            prompt1 = (
-                random.choice(best_quartile)
-                if len(best_quartile) > 1
-                else self.population.prompts[0]
-            )
-            # prompt2 most distinct to prompt1
-            prompt2 = sorted(
-                self.population,
-                key=lambda p: Levenshtein.distance(prompt1.text, p.text),
-            )[-1]
-            prompts = [prompt1, prompt2]
-            random.shuffle(prompts)
-            completion = model.chain_of_thought(
-                signature=sig.crossover,
-                prompt_a=prompts[0].prompt_and_perf(),
-                prompt_b=prompts[1].prompt_and_perf(),
-            )
-            prompt_obj = Prompt(
-                completion["prompt_proposal"], origin="crossover", gen=gen
-            )
-            self.population.add(prompt_obj)
-            logger.info(
-                f"CROSSOVER generated prompt:\n {str(prompt_obj)}\n from prompt1:\n{prompts[0]}\n and from prompt2:\n{prompts[1]}\n."
-            )
-            prompts.append(prompt_obj)
-        return prompts
-
     def paraphrase(self, gen: int = 0, n: int = 1):
         """ """
         prompts = []
         for _ in range(n):
-            input_prompt = random.choice(self.population.prompts)
-            completion = model.chain_of_thought(
-                sig.paraphrase, input_prompt=input_prompt
+            input_prompt = self.population.select(1)[0]
+            _, completion = optim_model.chain_of_thought(
+                sig.paraphrase, original_prompt=input_prompt.text
             )
             prompt_obj = Prompt(
                 completion["prompt_proposal"], origin="paraphrase", gen=gen
             )
             self.population.add(prompt_obj)
             logger.info(
-                f"MUTATION generated prompt:\n {str(prompt_obj)}\n from prompt:{input_prompt}\n."
+                f"PARAPHRASE generated prompt:\n {str(prompt_obj)}\n from prompt:{input_prompt}\n."
             )
             prompts.append(prompt_obj)
         return prompts
@@ -238,7 +244,7 @@ class Optimizer:
     def eval_and_sort(
         self, prompts: list[Prompt], batch: list[Example], target_pop="active"
     ):
-        split = batch[0].split
+        split = "dev" if self.data.answer_type=="imageurl" else batch[0].split
         pop = self.population if target_pop == "active" else self.all_prompts
         for prompt in prompts:
             self.data.eval_on_batch(prompt, batch)
@@ -254,7 +260,10 @@ class Optimizer:
             self.all_prompts.dump()
             # n = self.population.purge_duplicates()
             print(f"Population size: {len(self.population.prompts)}")
-            n = self.population.purge_duplicates()
+            if self.settings["purge"] == "duplicates":
+                n = self.population.purge_duplicates()
+            elif self.settings["purge"] == "worst":
+                n = self.population.purge_worst()
             print(f"New pop size: {len(self.population.prompts)}, purged {n}")
             new_prompts = self.op(gen=step, n=n)
             print(f"New prompts: {len(new_prompts)}")
@@ -269,6 +278,9 @@ class Optimizer:
 
     def load_and_fill_population(self, initial_population: list[Prompt] = []):
         if len(initial_population) > 0:
+            if self.data.answer_type == "imageurl":
+                for p in initial_population:
+                    p.placeholder = None
             self.all_prompts.set_update(initial_population)
             active = [p for p in self.all_prompts if p.active]
             self.population.add(active)
@@ -279,43 +291,35 @@ class Optimizer:
             remaining = self.settings["pop_size"] - len(initial_population)
         print(f"Filling population with {remaining} prompts")
 
-        self.lamarckian(n=remaining, gen=self.start_gen)
+        self.operators["LAMARCKIAN"](n=remaining, gen=self.start_gen)
 
     def begin(self, initial_population: list[Prompt] = []):
         self.load_and_fill_population(initial_population)
-
+        
         self.all_prompts.set_update(self.population.prompts)
         self.all_prompts.dump()
 
         print(f"Starting eval on batch {self.start_batch}")
         print(f"Population size: {len(self.population.prompts)}")
         self.eval_and_sort(self.population.prompts, self.start_batch)
-
+        optim_model.token_checkpoint("init")
+        solve_model.token_checkpoint("init")
         self.population.dump(gen=0)
-        
-        logger.info("Starting optimization")
-        self.__run()
-        logger.info("Optimization done")
+        if self.settings["do_optim"]:
+            logger.info("Starting optimization")
+            self.__run()
+            logger.info("Optimization done")
+            optim_model.token_checkpoint("optim")
+            solve_model.token_checkpoint("optim")
         self.all_prompts.dump()
         self.data.dump()
+        if self.settings["do_eval"]:
+            self.eval()
+            optim_model.token_checkpoint("eval")
+            solve_model.token_checkpoint("eval")
 
     def eval(self):
         logger.info("Starting final eval")
-        # if self.data.test[0].gold is None:
-        # self.data.update_grading_function()
-        # if self.data.grading_function is None:
-        #     print("Gold-free test")
-        #     self.eval_and_sort(
-        #         self.all_prompts.prompts,
-        #         self.data.get_batch("test", n=self.settings["batch_size"]),
-        #         "all",
-        #     )
-        #     by_gen = [
-        #         [prompt.get_score("test") for prompt in gen]
-        #         for gen in self.all_prompts.filter_by_iteration()
-        #         if len(gen) > 0
-        #     ]
-        # else:
         if self.data.eval_function is not None:
             print("Gold label testing")
             by_gen = self.all_prompts.test_iterations(self.data, "eval")

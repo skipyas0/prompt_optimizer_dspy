@@ -138,13 +138,13 @@ def exec_helper(code, queue, input_iterator):
     set_limits()
 
     f = io.StringIO()
-    local_vars = {
+    builtins = SAFE_BUILTINS.copy()
+    builtins.update({
         "input": lambda: next(input_iterator)  # Use the next value from the inputs iterator
-    }
-
+    })
     try:
         with redirect_stdout(f):
-            exec(compile(code, "<string>", "exec"), {"__builtins__": SAFE_BUILTINS}, local_vars)
+            exec(compile(code, "<string>", "exec"), {"__builtins__": builtins}, {})
         queue.put(f.getvalue().strip())
     except Exception as e:
         queue.put(f"Exception: {e}\n{traceback.format_exc()}")
@@ -197,6 +197,14 @@ def try_parse(val: Any, typ: Type[T]) -> T | None:
     except (ValueError, SyntaxError):
         pass
     return None
+    
+class imageurl(str): 
+    def __init__(self, value):
+        super().__init__(value)
+        self.value = value
+
+    def __repr__(self):
+        return f"imageurl({self.value})"
     
 if __name__ == "__main__":
     generic = list[int]

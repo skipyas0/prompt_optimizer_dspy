@@ -4,8 +4,8 @@ import json
 if __name__ == "__main__":
     settings = {
         "batch_size": 3,
-        "max_iters": 5,
-        "lamarck_batch": 10,
+        "max_iters": 10,
+        "lamarck_batch": 3, # 3 for code, 10 for seq and conn
         "pop_size": 10,
         "operator": "REFLECTIVE",
         "seeding_source": "PERSONAS",
@@ -13,9 +13,11 @@ if __name__ == "__main__":
         "grading": "match_lists",
         "eval": "match_lists",
         "answer_type": "str",
+        "do_optim": True,
         "do_eval": True,
-        "run": "conn-pers-small",
+        "run": "connections1_REFLECTIVE",
         "debug": False,
+        "purge": "duplicates"
     }
 
 
@@ -41,12 +43,11 @@ if __name__ == "__main__":
     grading_function = getattr(grading, settings["grading"]) if settings["grading"] else None
     eval_function = getattr(grading, settings["eval"]) if settings["eval"] else None
     data = Data.from_json(f"datasets/{settings['dataset']}.json", grading_function, eval_function, settings["answer_type"])
-    
     data.update_attempts(initial_attempts)
+
     optim = Optimizer(data, settings)
     optim.begin(initial_population)
-    if settings["do_eval"]:
-        optim.eval()
+
     
     print("Finished run with settings:")
     print(settings)
