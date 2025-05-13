@@ -4,8 +4,8 @@ __pycache__
 runs
 *.log
 slurm
-*.ipynb
 archive
 datasets
 finished_experiments
 .vscode
+.DS_Store

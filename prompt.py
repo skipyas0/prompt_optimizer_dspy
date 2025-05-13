@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 from typing import Literal
 import uuid
 
@@ -24,12 +23,14 @@ class Prompt:
         id: str = None,
         placeholder: str = PLACEHOLDER,
     ):
+        """
+        Representation of a single prompt in the optimization population.
+        """
         self.text = text
         self.gen = gen
         self.origin = origin
-        self.valid = True
-        self.__dev_score = -1.0 if self.valid else 0.0
-        self.__test_score = -1.0 if self.valid else 0.0
+        self.__dev_score = -1.0 
+        self.__test_score = -1.0
         self.active = active
         self.id = uuid.uuid4().hex if id is None else id
         self.attempts = []
@@ -37,12 +38,10 @@ class Prompt:
         self.placeholder = placeholder
         self.sanitize()
 
-    def sanitize(self) -> bool:
+    def sanitize(self) -> None:
         """
-        Sanitize prompt and return if it's valid
-        Valid prompts do not have additional formatting brackets.
+        Checks if the prompt has exactly 1 placeholder and fixes it if not.
         """
-        print(self.__dict__)
         if self.placeholder is not None:
             count = self.text.count(self.placeholder)
             if count == 0:
@@ -79,13 +78,10 @@ class Prompt:
         p.__test_score = prompt["test_score"]
         return p
 
-    def score_to_count(self) -> int:
-        return round(self.__dev_score * 10 + 3)
-
-    def prompt_and_perf(self):
+    def prompt_and_perf(self) -> tuple[str, float]:
         return (self.text, self.__dev_score)
 
-    def get_score(self, split: Literal["dev", "test"]):
+    def get_score(self, split: Literal["dev", "test"]) -> float:
         if split == "dev":
             return self.__dev_score
         elif split == "test":
@@ -103,14 +99,18 @@ class Prompt:
             self.__test_score = score
 
     def update_comparisons(self, comparison):
+        """
+        Adds comparison to prompt history and updates win rate.
+        """
         comparison = comparison.copy()
-        winner = (
-                comparison["prompt_a"]
-                if comparison["verdict"] == "prompt_a"
-                else comparison["prompt_b"]
-            )
-        comparison["verdict"] = winner == self.id
+        verdict = comparison["verdict"]
+        winner_id = comparison[verdict] if verdict in ["prompt_a", "prompt_b"] else None
+
+        # did I win?
+        comparison["verdict"] = winner_id == self.id
         self.comparisons.append(comparison)
+
+        # score update
         dev_comps = [
             c for c in self.comparisons if c["split"] == "dev" 
         ]

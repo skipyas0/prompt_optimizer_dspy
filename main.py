@@ -1,21 +1,34 @@
 import os
 import time
 import json
+
+# done: conn, seq
+# refl, fb, iter, para
+ds = "sequences"
+op = "feedback"
+ix = 4
+
+
+
+answer_type = "int" if ds == "sequences" else "str"
+eval_f = "match_lists" if ds == "connections" else "exact_match_float" if ds == "sequences" else "test_code"
+grading = None if op == "feedback" else eval_f
+
 if __name__ == "__main__":
     settings = {
         "batch_size": 3,
         "max_iters": 10,
         "lamarck_batch": 3, # 3 for code, 10 for seq and conn
         "pop_size": 10,
-        "operator": "REFLECTIVE",
+        "operator": op.upper(),
         "seeding_source": "PERSONAS",
-        "dataset": "connections",
-        "grading": "match_lists",
-        "eval": "match_lists",
-        "answer_type": "str",
+        "dataset": ds,
+        "grading": grading,
+        "eval": eval_f,
+        "answer_type": answer_type,
         "do_optim": True,
         "do_eval": True,
-        "run": "connections1_REFLECTIVE",
+        "run": f"{ds}{ix}_{op.upper()}",
         "debug": False,
         "purge": "duplicates"
     }

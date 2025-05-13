@@ -24,12 +24,15 @@ logger.addHandler(handler)
 
     
 class ModelAPI:
-    def __init__(self, temp=0.75, api_key=None, identifier=None, logging=True, models = ["google/gemma-3-27b-it:free","google/gemma-3-27b-it"]) -> None:
+    def __init__(self, temp=0.75, api_key=None, models = ["google/gemma-3-27b-it:free","google/gemma-3-27b-it"]) -> None:
+        """
+        Simple inference framework implementing structured generation defined by a Signature object - inspired by DSPy.
+
+        """
+        
         self.temp = temp
-        self.identifier = identifier
         load_dotenv()
         port = os.getenv("VLLM_MY_PORT")
-        self.logging = logging
         api_key = api_key or os.getenv("OPENROUTER")
         if port:
             # hosted locally
@@ -39,45 +42,58 @@ class ModelAPI:
                 api_key="EMPTY",
             )
         elif api_key:
-            # hosted on openai
-            #self.model = "gpt-4o-mini"
-            #self.client = openai.OpenAI(api_key=api_key)
+            # hosted on openrouter
             self.model = models[0]
-            self.fallback = models[1:]
+            self.fallback = models[1:] # openrouter allows fallback models when main is offline
+
             self.client = openai.OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=api_key)
         else:
             raise ValueError("No API key or port specified")
         logger.info(
-            f"ModelAPI initialized with temp={temp}, api_key={api_key}, identifier={identifier}, logging={logging}"
+            f"ModelAPI initialized with temp={temp}, api_key={api_key[:10] if api_key else None}"
         )
+
+        # token use stats
         self.prompt_token_acc = 0
         self.completion_token_acc = 0
+
     def forward(self, messages, temp=None):
-        #with open("forward.json", "w+") as f:
-        #    json.dump(messages, f)
+        """
+        Simple API inference call with given messages.
+        """
         logger.debug(f"Forwarding...\n{str(messages)}")
+
         if temp is None:
             temp = self.temp
+
         completion = self.client.chat.completions.create(
             model=self.model,
-            extra_body={
+            extra_body={ 
                 "models": self.fallback
             },
             messages=messages,
             temperature=temp,
             n=1,
-            max_completion_tokens=2000
+            max_completion_tokens=2000 # hardcoded limit, gemma sometimes gets into inf loop
         )
-        #with open("completion.json", "w+") as f:
-        #    json.dump(completion.choices[0].message.content, f)
+
         logger.debug(f"Getting completion\n{str(completion)}")
-        self.prompt_token_acc += completion.usage.prompt_tokens
-        self.completion_token_acc += completion.usage.completion_tokens
+
+        # add tokens to stats
+        if completion is not None and completion.usage is not None:
+            self.prompt_token_acc += completion.usage.prompt_tokens
+            self.completion_token_acc += completion.usage.completion_tokens
+        else:
+            logger.warning("Empty completion, cant add token stats.")
+
         return completion
     
     def token_checkpoint(self, name="checkpoint"):
+        """
+        Reset token counter and log.
+        """
         logger.info(
             f"Token checkpoint: {name} - Prompt tokens: {self.prompt_token_acc}, Completion tokens: {self.completion_token_acc}"
         )
@@ -85,9 +101,17 @@ class ModelAPI:
         self.completion_token_acc = 0
     
     def predict(self, signature: Signature, temp=None, developer_prompt=None, max_tries=25, **kwargs):
+        """
+        Backbone of structured generation.
+        Adds a developer prompt to messages to explain the Signature input.
+        Repeats up to max_tries for applications where it must not fail.
+        Inputs for Signature specified in kwargs.
+        """
+
         if temp is None:
             temp = self.temp
         
+        # If DEBUG flag is defined, we dont call the LLM but return correct Signature outputs with value 'test'
         if os.getenv("DEBUG") is not None:
             return {k: "test" for k,_ in signature.as_dict()["outputs"].items()}
         
@@ -118,12 +142,14 @@ class ModelAPI:
                 Your output must be strictly valid JSON and fill **all** requested output fields.
             """
             )
+
         # repeat attempt up to max_tries when response is invalid
         ret = None
         tries = 0
         while tries < max_tries and ret is None:
+
             inputs = sorted(signature.mandatory_inputs())
-            #print(f"Predict keys {sorted(list(kwargs.keys()))}, inputs {inputs}")
+            # check inputs
             assert sorted(list(kwargs.keys())) == inputs, f"Kwargs {kwargs} do not match the signature inputs {inputs}"
     
             signature_dict = signature.as_dict()
@@ -134,13 +160,17 @@ class ModelAPI:
             content = [
                 {"type": "text", "text": f"{json.dumps(signature_dict)}"}]
             
+            # For VL models, images will be sent in a list before the main text message
             images = []
             for i in signature.input_fields:
                 print(f"Signature input {i.name} type {i.type.__name__}")
                 if i.type.__name__ == "imageurl":
                     images.append({"type": "image_url", "image_url": f"{signature_dict['inputs'][i.name]}"}) 
+            
+            # if no images, just send str
             content = content[0]["text"] if len(images) == 0 else images + content
             
+            # construct messages
             msgs = [
                 {
                     "role": "developer",
@@ -149,6 +179,7 @@ class ModelAPI:
                 {"role": "user", "content": content},
             ]
     
+            # forward the messages (1st failure point)
             try:
                 completion = self.forward(messages=msgs, temp=temp)
                 if completion.choices is None or len(completion.choices) == 0:
@@ -158,9 +189,13 @@ class ModelAPI:
                 continue
     
             content = completion.choices[0].message.content
+
+            # in case the api completion contest is a list, get just the text
             if isinstance(content, list) and len(content) == 1 and isinstance(content[0], dict) and "text" in content[0]:
                 logger.warning("Completion had 'type' field")
                 content = content[0]["text"]
+
+            # structured output parsin (2nd failure point)
             try:
                 json_obj = extract_json_block(content, signature.mandatory_outputs())
                 ret_attempt = dict(json_obj)
@@ -172,21 +207,16 @@ class ModelAPI:
                 logger.warning(f"JSON response parsing error for {content}: {str(e)}")
             tries += 1
         return ret
-    
-    def ask(self, question, temp=None):
-        if temp is None:
-            temp = self.temp
-        sig = Signature.from_str(
-            "question: str () -> answer: str (concise, clear and helpful answer to the user's question)"
-        )
-        response = self.predict(sig, question=question)
-        return response["answer"]
 
     def chain_of_thought(
-        self, signature: Signature, temp=None, max_tries=10, **kwargs
+        self, signature: Signature, temp=None, max_tries=25, **kwargs
     ) -> tuple[str, dict]:
+        """
+        Adds a 'reasoning' field to the beggining of signature, inciting CoT.
+        """
         if temp is None:
             temp = self.temp
+            
         signature = signature.copy()
         signature.update_outputs(
             [
@@ -203,6 +233,8 @@ class ModelAPI:
             return None, None
         reasoning = ret.pop("reasoning")
         return reasoning, ret
+
+###TODO vvv UNTESTED FOR OPTIM, DEBUGGING PARSING FOR BENCHMARKS MIGHT HAVE MESSED THIS UP
 
     def chain_of_thought_sc(
         self, signature: Signature, temp=None, n_chains=5, **kwargs
@@ -663,7 +695,12 @@ class ModelAPI:
         answer = self.predict(signature, **kwargs)
         return [node.get_thought_chain() for node in solution_nodes], answer
 
+### ^^^ UNTESTED
+
 def extract_json_blob(text: str, required_fields) -> str:
+    """
+    Find a curly bracket-enclosed string that has all required fields.
+    """
     candidates = re.findall(r'\{.*?\}', text, re.DOTALL)
 
     for candidate in candidates:
@@ -673,24 +710,24 @@ def extract_json_blob(text: str, required_fields) -> str:
 
 
 def extract_json_block(text, required_fields):
+    """
+    Parse JSON from LLM output.
+    """
     json_content = extract_json_blob(text, required_fields)
     if json_content is None:
         logger.warning(f"Could not find JSON block in text: {text}")
         return None
     logger.debug(f"Extracted JSON block: {json_content}")
 
-    # Other invalid escapes
-    # json_content = json_content.replace("\\'", "'")
-    # json_content = re.sub(r'\\{2}"', r'\\"', json_content)
-    # json_content = re.sub(r'\\{4}', r'\\\\', json_content)
-
+    # sanitize escape sequences
     def replacer(match):
         content = match.group(0)
         return content.replace('\n', '\\n').replace('\r', '\\r')
 
-    # Only apply to quoted strings (naive but works 90% of the time)
+    # only apply to quoted strings
     json_content = re.sub(r'"(?:[^"\\]|\\.)*"', replacer, json_content)
 
+    # code blocks inside JSON can mess up parsing -> replace by placeholder
     code_block = re.search(r'```python(.*?)```', json_content, re.DOTALL)
     code = None
     if code_block:
@@ -700,8 +737,13 @@ def extract_json_block(text, required_fields):
 
     try:
         data = json.loads(json_content)
+
+        # if there is a code placeholder, replace it with the code
         if code is not None:
-            data["solution"] = code
+            for k, v in data.items():
+                if v is None:
+                    data[k] = code
+
         return data
     except json.JSONDecodeError as e:
         logger.warning(f"Error parsing JSON after cleanup: {e} at position {e.pos}\nContent: {json_content}")
@@ -717,9 +759,3 @@ optim_model = ModelAPI(
     temp=0.75,
 )
 
-
-if __name__ == "__main__":
-    with open("inp.txt", "r") as f:
-        a = f.read()
-    js = extract_json_block(a, ["reasoning", "prompt_proposal"])
-    print(js["prompt_proposal"])

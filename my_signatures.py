@@ -6,6 +6,9 @@ import textwrap
 
 class Field:
     def __init__(self, name: str, type: type, desc: str):
+        """
+        Single output or input field in Signature.
+        """
         self.name = name
         self.type = type
         self.desc = desc
@@ -18,6 +21,9 @@ class Signature:
         output_fields: list[Field],
         instructions: str = "",
     ):
+        """
+        Template for structured generation inspired by a similar concept in DSPy.
+        """
         self.instructions = instructions
         self.input_fields = input_fields
         self.output_fields = output_fields
@@ -77,18 +83,23 @@ class Signature:
         return Signature(io_fields[0], io_fields[1])
 
     def as_dict(self, prefix="") -> dict:
+        """
+        Transforms self to dict for use in inference call.
+        Prefix aids differentiating between main signature and a context signature in multi-turn settings
+        """
+
         # Optionally adds instructions field to inputs and outputs
-        # Prefix aids differentiating between main signature and a context signature in multi-turn settings
         instructions = (
             {prefix + "instructions": self.instructions}
             if len(self.instructions) > 0
             else {}
         )
+
         # Dict join operator
         return instructions | {
             prefix
             + "inputs": {
-                f"{f.name}": None
+                f"{f.name}": None # inputs are just name: value
                 for f in self.input_fields
             },
             prefix
@@ -103,7 +114,7 @@ class Signature:
 
     def matches_output(self, output: dict) -> bool:
         """
-        Checks if output matches specification and in-place parses the values in the output dict if possible.
+        Checks if output matches specification.
         """
         # Sometimes the model wraps all outputs into an 'outputs' field
         if "outputs" in output.keys() and self.matches_output(output["outputs"]):
@@ -113,9 +124,6 @@ class Signature:
         for field in self.output_fields:
             if field.name not in output.keys():
                 return False
-            #if not isinstance(output[field.name], field.type):
-            #    print("before try parse:", field.name, field.type, '\n', output[field.name])
-            #    output[field.name] = utils.try_parse(output[field.name], field.type)
             if output[field.name] is None:
                 return False
         outputs = self.mandatory_outputs()
@@ -195,24 +203,6 @@ lamarckian_personas = Signature(
     and design a prompt that will guarantee success at solving similar tasks in the future.
     Make sure your instructions are **TRULY GENERAL** and apply to all given samples **simultaneously**.
 
-    Use markdown formatting in you final answer to indicate bullet points and whatever else necessary.
-    As a placeholder for the task question, '<INSERT TASK QUESTION HERE>' should be used exactly ONCE.
-    In the final answer, do not include a title or any additional data, just the prompt.
-    """)
-)
-
-lamarckian_values = Signature(
-    [Field("task_examples", list, "Samples from a problem class"), Field("focus", list, "Values to focus on while writing the prompt")],
-    [Field("prompt_proposal", str, "Instructions for solving the problem")],
-    textwrap.dedent("""\
-    Craft **general** developer prompt to help an LLM with solving a class of problems.
-    
-    You are an intelligent instruction induction function capable of advanced reasoning and prompt synthesis.
-    You proud yourself in focusing on the *value* specified in the 'focus' field.
-    Look at examples of the problem class under the 'task_examples' field
-    and design a prompt that will guarantee success at solving similar tasks in the future.
-    Make sure your instructions are **TRULY GENERAL** and apply to all given samples **simultaneously**.
-                    
     Use markdown formatting in you final answer to indicate bullet points and whatever else necessary.
     As a placeholder for the task question, '<INSERT TASK QUESTION HERE>' should be used exactly ONCE.
     In the final answer, do not include a title or any additional data, just the prompt.

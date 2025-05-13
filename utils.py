@@ -1,5 +1,4 @@
 import builtins
-from datasets import load_dataset
 import json
 import os
 import io
@@ -7,8 +6,6 @@ from contextlib import redirect_stdout
 import traceback
 import multiprocessing
 import resource
-import ast
-from typing import Type, TypeVar, Any, get_origin, get_args
 
 SAFE_BUILTINS = {
     "print": print,
@@ -48,54 +45,10 @@ SAFE_BUILTINS = {
     "__import__": lambda name, *args: None,  # disable imports
 }
 
-def download_gsm8k():
-    ds = load_dataset('openai/gsm8k', 'main', split='train').select(range(15))
-
-    def map_gsm8k(example):
-        example['question'] = example['question']
-        example['answer'] = example['answer'].split('####')[1].replace('\xa0', '').strip()
-        return {'question': example['question'], 'answer': example['answer']}
-    
-    ds = ds.map(map_gsm8k, remove_columns=ds.column_names, load_from_cache_file=False).to_list()
-    with open("gsm8k.json", "w+") as f:
-        json.dump(ds, f)
-
-
-
-def load_gsm8k_server():
-    ds = load_dataset('openai/gsm8k', 'main', split='train').select(range(15))
-
-    def map_gsm8k(example):
-        example['question'] = example['question']
-        example['answer'] = example['answer'].split('####')[1].replace('\xa0', '').strip()
-        return {'question': example['question'], 'answer': example['answer']}
-    
-    ds = ds.map(map_gsm8k, remove_columns=ds.column_names, load_from_cache_file=False).to_list()
-
-    return list(ds)
-
-def download_codecontests():
-    ds = load_dataset('deepmind/code_contests', split='train')
-    ds = ds.filter(lambda ex: ex['difficulty']  == 7 and '<image>' not in ex['description'] and 1 in ex["solutions"]["language"]) # filter easy samples 
-    def map_code_contests(example):
-        question = example['description']
-        test_inputs = [x.strip().split('\n') for x in example['private_tests']['input']]
-        test_outputs = [x.strip() for x in example['private_tests']['output']]
-        python_index = example['solutions']['language'].index(1)
-        code = example['solutions']['solution'][python_index]
-        return {
-            'question': question,
-            'test_inputs': test_inputs,
-            'test_outputs': test_outputs,
-            'code': code
-        }
-    
-    ds = ds.map(map_code_contests, remove_columns=ds.column_names, load_from_cache_file=False)
-    ds = ds.select(range(30)).to_list()
-    with open("codecontests.json", "w+") as f:
-        json.dump(ds, f)
-
 def check_and_load_population(folder: str) -> list:
+    """
+    
+    """
     initial_population = []
     initial_attempts = []
     initial_comparisons = []
@@ -124,17 +77,20 @@ def check_and_load_population(folder: str) -> list:
     return initial_population, initial_attempts, initial_comparisons
 
 def sep_norm_sort(string, sep1=',', sep2=';'):
+    """
+    Normalization for connections outputs.
+    """
     if hasattr(string, "split"):
         return [sorted([ss.strip().lower() for ss in s.split(sep1)]) for s in string.split(sep2)]
     return None            
 
 def set_limits():
-    #soft, hard = resource.getrlimit(resource.RLIMIT_AS)
-    #new_limit = min(hard, 512 * 1024 * 1024)  # can't go above current hard limit
-    #resource.setrlimit(resource.RLIMIT_AS, (new_limit, hard))
     resource.setrlimit(resource.RLIMIT_CPU, (5, 5))  # 5-second CPU limit
 
 def exec_helper(code, queue, input_iterator):
+    """
+    Target function for code execution subprocess.
+    """
     set_limits()
 
     f = io.StringIO()
@@ -151,8 +107,13 @@ def exec_helper(code, queue, input_iterator):
 
 
 def execute_code(raw_code: str, inputs=[]) -> str:
+    """
+    Helper function that executes python code in a semi-safe environment (with safe built ins).
+    """
     if raw_code is None:
         return "Exception: No code provided."
+    
+    # simple parse from markdown block
     parts = raw_code.split('```')
     if len(parts) == 3:
         sanitized_code = '\n'.join(parts[1].split('\n')[1:])
@@ -160,12 +121,11 @@ def execute_code(raw_code: str, inputs=[]) -> str:
         sanitized_code = raw_code
     sanitized_code = sanitized_code.encode().decode('unicode_escape')
 
-    input_iterator = iter(inputs)  # Create an iterator from the inputs list
 
     queue = multiprocessing.Queue()
-    p = multiprocessing.Process(target=exec_helper, args=(sanitized_code, queue, input_iterator))
+    p = multiprocessing.Process(target=exec_helper, args=(sanitized_code, queue, iter(inputs)))
     p.start()
-    p.join(6)  # 10 second timeout
+    p.join(6)  # timeout
 
     if p.is_alive():
         p.terminate()
@@ -183,40 +143,15 @@ def safe_int(value, default=0):
 def str_to_type(type_str: str):
     return getattr(builtins, type_str, None)  
 
-
-T = TypeVar("T")
-
-def try_parse(val: Any, typ: Type[T]) -> T | None:
-    if isinstance(val, typ if not get_origin(typ) else get_origin(typ)):
-        return val
-    try:
-        parsed = ast.literal_eval(val) if isinstance(val, str) else val
-        if isinstance(parsed, typ if not get_origin(typ) else get_origin(typ)):
-            if get_origin(typ) and all(isinstance(item, get_args(typ)[0]) for item in parsed):
-                return parsed
-    except (ValueError, SyntaxError):
-        pass
-    return None
     
 class imageurl(str): 
     def __init__(self, value):
+        """
+        Helper class to specify image generation tasks.
+        """
+        
         super().__init__(value)
         self.value = value
 
     def __repr__(self):
         return f"imageurl({self.value})"
-    
-if __name__ == "__main__":
-    generic = list[int]
-    val = "[9, 2]"
-    assert try_parse(val, generic) == [9, 2]
-
-    val_str = "['a', 'b']"
-    generic_str = list[str]
-    assert try_parse(val_str, generic_str) == ['a', 'b']
-
-    val_list = ['a', 'b']
-    assert try_parse(val_list, generic_str) == ['a', 'b']
-
-if __name__ == "__main__":
-    download_codecontests()
