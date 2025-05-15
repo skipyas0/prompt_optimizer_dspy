@@ -322,15 +322,14 @@ class Optimizer:
         self.all_prompts.set_update(self.population.prompts)
         self.all_prompts.dump()
 
-        # eval initial population
-        self.eval_and_sort(self.population.prompts, self.start_batch)
-
         # save init data
         optim_model.token_checkpoint("init")
         solve_model.token_checkpoint("init")
         self.population.dump(gen=0)
 
         if self.settings["do_optim"]:
+            # eval initial population
+            self.eval_and_sort(self.population.prompts, self.start_batch)
             logger.info("Starting optimization")
             self.run()
             logger.info("Optimization done")

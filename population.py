@@ -74,14 +74,28 @@ class Population:
 
         if split is None: # this is an image generation task, needs different cot call
             split = "dev"
-            _, comparison = optim_model.chain_of_thought(
-                sig.image_compare,
-                description=task.question,
-                prompt_a=prompt_a.text,
-                prompt_b=prompt_b.text,
-                output_a=attempt_a.answer,
-                output_b=attempt_b.answer,
-            )
+            # some prompts trigger openai moderation filters: these auto-lose
+            if attempt_a.answer is None:
+                comparison = {
+                    "verdict": "prompt_b",
+                    "output_comparison": "The first image output_a did not generate.",
+                    "prompt_comparison": "Prompt_a triggers moderation filters.",
+                }
+            elif attempt_b.answer is None:
+                comparison = {
+                    "verdict": "prompt_a",
+                    "output_comparison": "The second image output_b did not generate.",
+                    "prompt_comparison": "Prompt_b triggers moderation filters.",
+                }
+            else:
+                _, comparison = optim_model.chain_of_thought(
+                    sig.image_compare,
+                    description=task.question,
+                    prompt_a=prompt_a.text,
+                    prompt_b=prompt_b.text,
+                    output_a=attempt_a.answer,
+                    output_b=attempt_b.answer,
+                )
         else: # all other tasks
             _, comparison = optim_model.chain_of_thought(
                 sig.compare,

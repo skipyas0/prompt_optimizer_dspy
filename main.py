@@ -6,7 +6,7 @@ import json
 # refl, fb, iter, para
 ds = "sequences"
 op = "feedback"
-ix = 4
+ix = 2
 
 
 
@@ -17,7 +17,7 @@ grading = None if op == "feedback" else eval_f
 if __name__ == "__main__":
     settings = {
         "batch_size": 3,
-        "max_iters": 10,
+        "max_iters": 0,
         "lamarck_batch": 3, # 3 for code, 10 for seq and conn
         "pop_size": 10,
         "operator": op.upper(),
@@ -26,7 +26,7 @@ if __name__ == "__main__":
         "grading": grading,
         "eval": eval_f,
         "answer_type": answer_type,
-        "do_optim": True,
+        "do_optim": False,
         "do_eval": True,
         "run": f"{ds}{ix}_{op.upper()}",
         "debug": False,

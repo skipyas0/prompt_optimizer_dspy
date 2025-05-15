@@ -9,3 +9,4 @@ datasets
 finished_experiments
 .vscode
 .DS_Store
+*.pdf

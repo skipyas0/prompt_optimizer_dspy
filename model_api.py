@@ -163,7 +163,6 @@ class ModelAPI:
             # For VL models, images will be sent in a list before the main text message
             images = []
             for i in signature.input_fields:
-                print(f"Signature input {i.name} type {i.type.__name__}")
                 if i.type.__name__ == "imageurl":
                     images.append({"type": "image_url", "image_url": f"{signature_dict['inputs'][i.name]}"}) 
             
@@ -216,7 +215,7 @@ class ModelAPI:
         """
         if temp is None:
             temp = self.temp
-            
+
         signature = signature.copy()
         signature.update_outputs(
             [
@@ -512,7 +511,6 @@ class ModelAPI:
         )
 
         content = self.predict(decompose_signature, temp=temp, original_signature=signature_dict)
-        print("decomp content",content)
         return content["subtasks"]
 
     def tree_of_thoughts(
