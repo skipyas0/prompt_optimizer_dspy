@@ -1,0 +1,152 @@
+[
+    {
+        "question": "sewer, window, pipe, drain, duct, smile, egg, knuckles",
+        "answer": "drain, duct, pipe, sewer;egg, knuckles, smile, window",
+        "id": "73aa4d8ef19d46c08be8ad061cef3059"
+    },
+    {
+        "question": "flush, stage, report, orchestra, box, level, story, article, floor, feature, balcony, surprise, flat, shock, rock, even",
+        "answer": "floor, rock, shock, surprise;article, feature, report, story;even, flat, flush, level;balcony, box, orchestra, stage",
+        "id": "2074d68e95a947bf8bb0bcb791360f88"
+    },
+    {
+        "question": "style, move, affect, sen, grace, sour, sight, tan, impact, bask, bake, taste, touch, elegance, sine, sun",
+        "answer": "elegance, grace, style, taste;bake, bask, sun, tan;affect, impact, move, touch;sen, sight, sine, sour",
+        "id": "4e536861e3144e4192d9a20e855b63ba"
+    },
+    {
+        "question": "spring, carrot, om, tumbler, relish, fancy, hurts, cylinder, love, savor, jewel, pin",
+        "answer": "fancy, love, relish, savor;cylinder, pin, spring, tumbler;carrot, hurts, jewel, om",
+        "id": "ed73d99a72224528b01de1bc9992172f"
+    },
+    {
+        "question": "pool, chum, pal, whiskers, fund, bud, scruff, dank, dark, mate, musty, cold, pot, kitty, fuzz, shadow",
+        "answer": "bud, chum, mate, pal;cold, dank, dark, musty;fuzz, scruff, shadow, whiskers;fund, kitty, pool, pot",
+        "id": "15cee9f154bc4aa3b9d1c50a9bad5bb5"
+    },
+    {
+        "question": "libre, sling, pin, omg, mama, mia, loin, ram, round, chuck, flank, mule",
+        "answer": "chuck, flank, loin, round;mia, omg, pin, ram;libre, mama, mule, sling",
+        "id": "67908ab59bcb447ca5ca590ecdee03f9"
+    },
+    {
+        "question": "shady, me, feed, dine, feast, ella, pickings, yo, fit, sus, sup, jim",
+        "answer": "dine, feast, feed, sup;ella, me, sus, yo;fit, jim, pickings, shady",
+        "id": "09ac51222bde46f0985a2d21950a6ec0"
+    },
+    {
+        "question": "dice, flush, cube, wealthy, chop, loaded, rich, mince",
+        "answer": "flush, loaded, rich, wealthy;chop, cube, dice, mince",
+        "id": "337955784ae4424ab3511e4f60136dd0"
+    },
+    {
+        "question": "use, leverage, through, up, exploit, done, over, milk",
+        "answer": "exploit, leverage, milk, use;done, over, through, up",
+        "id": "e26ae4b70ed5445784b739a029216cc9"
+    },
+    {
+        "question": "animal, line, window, plane, view, fly, supreme, pocket, history, solid, rivet, point, kink, button, file, door",
+        "answer": "button, fly, pocket, rivet;line, plane, point, solid;file, history, view, window;animal, door, kink, supreme",
+        "id": "5ae0f9a02ba74a4492c6ae3c284db4a5"
+    },
+    {
+        "question": "steer, bully, cow, lead, daunt, guide, rattle, direct",
+        "answer": "direct, guide, lead, steer;bully, cow, daunt, rattle",
+        "id": "26f54f1cc22d4a46be926dcb2374fd70"
+    },
+    {
+        "question": "shot, still, cinch, secure, coast, lock, sail, pic, breeze, glide, snap, ice",
+        "answer": "pic, shot, snap, still;cinch, ice, lock, secure;breeze, coast, glide, sail",
+        "id": "07b2b49e2c6b47318723e5ed2d786fdc"
+    },
+    {
+        "question": "statement, aioli, ancestry, bill, merchandise, ranch, marinara, examine, question, barbecue, broth, cattle, receipt, probe, invoice, grill",
+        "answer": "aioli, barbecue, marinara, ranch;examine, grill, probe, question;bill, invoice, receipt, statement;ancestry, broth, cattle, merchandise",
+        "id": "c44ed9438eab489e8422324bf513561b"
+    },
+    {
+        "question": "premier, champion, first, back, maiden, endorse, initial, support",
+        "answer": "first, initial, maiden, premier;back, champion, endorse, support",
+        "id": "af3e9ff1598d400d8a21b0d58cf1ca44"
+    },
+    {
+        "question": "turtledove, bulldog, mattress, trampoline, mousetrap, catfish, horsefly, clock",
+        "answer": "bulldog, catfish, horsefly, turtledove;clock, mattress, mousetrap, trampoline",
+        "id": "840ef456e66d42258892790cef378d0f"
+    },
+    {
+        "question": "bowline, sheepshank, bunk, pitchfork, crock, hogwash, pole, hitch, hammer, baton, goatee, bend, tail, hurdle, horns, horsefeathers",
+        "answer": "bunk, crock, hogwash, horsefeathers;baton, hammer, hurdle, pole;goatee, horns, pitchfork, tail;bend, bowline, hitch, sheepshank",
+        "id": "5528613ef19448cd8c532c6d8f9b6061"
+    },
+    {
+        "question": "brand, collection, label, hare, greece, line, duck, maim, pig, bunny, katz, martian",
+        "answer": "brand, collection, label, line;bunny, duck, martian, pig;greece, hare, katz, maim",
+        "id": "a5dca483a0884971969a72ec3b5f2175"
+    },
+    {
+        "question": "information, follow, pillar, interest, stake, pole, secrets, post, observe, dirt, share, regard, percentage, column, mind, intelligence",
+        "answer": "column, pillar, pole, post;follow, mind, observe, regard;interest, percentage, share, stake;dirt, information, intelligence, secrets",
+        "id": "8ae22cb1e78e45d9906e840b6b32c84b"
+    },
+    {
+        "question": "handful, bother, tower, few, fool, pain, some, magician, pest, several, lovers, many",
+        "answer": "bother, handful, pain, pest;few, many, several, some;fool, lovers, magician, tower",
+        "id": "e5604c2cffcc49e3851335641c4017d3"
+    },
+    {
+        "question": "clap, snap, chops, tap, bun, hero, kisser, trap, wrap, bob, roll, yap",
+        "answer": "bun, hero, roll, wrap;chops, kisser, trap, yap;bob, clap, snap, tap",
+        "id": "f02213517bc247c5bfe77fc69ac60a54"
+    },
+    {
+        "question": "vile, veil, live, open, easy, receptive, evil, flexible",
+        "answer": "easy, flexible, open, receptive;evil, live, veil, vile",
+        "id": "b8d9bc4f7dab42fd85d414f526c911ed"
+    },
+    {
+        "question": "seize, kettle, geez, pot, wise, pan, tease, griddle",
+        "answer": "griddle, kettle, pan, pot;geez, seize, tease, wise",
+        "id": "b005e0f14bcb434497f9eb99a29e8abf"
+    },
+    {
+        "question": "bounty, bridge, dip, tutu, spelling, gore, crunch, squat, busy, saloon, queen, duel, king, honey, carter, cowboy",
+        "answer": "bridge, crunch, dip, squat;bounty, cowboy, duel, saloon;carter, gore, king, tutu;busy, honey, queen, spelling",
+        "id": "d504ec03ffef437296b72f842e2e34a4"
+    },
+    {
+        "question": "virgin, knock, deep, hail, snow, butt, fuzz, bloody, extreme, intense, noise, bump, static, ram, proud, fierce",
+        "answer": "deep, extreme, fierce, intense;bump, butt, knock, ram;fuzz, noise, snow, static;bloody, hail, proud, virgin",
+        "id": "49e3ec1188ec476db9c834e1906983fd"
+    },
+    {
+        "question": "popcorn, crackerjack, expert, ace, soulmate, joker, chock, jack, gladiator, her, hotshot, wrench, rocketry, tire, rapture, signs",
+        "answer": "ace, crackerjack, expert, hotshot;chock, jack, tire, wrench;gladiator, her, joker, signs;popcorn, rapture, rocketry, soulmate",
+        "id": "bfc87f7e7c52457489ea57e35e2215a0"
+    },
+    {
+        "question": "sun, mad, cross, cracked, onion, silver, lampoon, star, lead, headliner, garlic, principal",
+        "answer": "headliner, lead, principal, star;cross, garlic, silver, sun;cracked, lampoon, mad, onion",
+        "id": "639b9a8b64464817a62e3c01b49a3fb3"
+    },
+    {
+        "question": "surface, external, crawl, ad-lib, side, domino, freestyle, improv, placebo, make up, shallow, butterfly, coo, cosmetic, nurse, babble",
+        "answer": "ad-lib, freestyle, improv, make up;babble, coo, crawl, nurse;cosmetic, external, shallow, surface;butterfly, domino, placebo, side",
+        "id": "4257bb5eb99d4ec99f2a49bda7a7541b"
+    },
+    {
+        "question": "row, drift, curl, tide, current, press, fly, wave",
+        "answer": "current, drift, tide, wave;curl, fly, press, row",
+        "id": "6145c27cb1e04a4c8097395f13be7d0e"
+    },
+    {
+        "question": "carat, text, adhere, paste, glue, rod, copy, plus, stick, words, list, writing, clarity, ok, color, cut",
+        "answer": "adhere, glue, paste, stick;copy, text, words, writing;carat, clarity, color, cut;list, ok, plus, rod",
+        "id": "3e9acc6a75364d209cda4ce7aa1fb76c"
+    },
+    {
+        "question": "sponge, bird, cherry, splash, sprinkle, drop, bubble, ruby, brick, rose, spot, mud",
+        "answer": "brick, cherry, rose, ruby;drop, splash, spot, sprinkle;bird, bubble, mud, sponge",
+        "id": "a4a75d58cfbc4664bef2c0e474c53e1f"
+    }
+]

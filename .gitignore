@@ -5,8 +5,6 @@ runs
 *.log
 slurm
 archive
-datasets
-finished_experiments
 .vscode
 .DS_Store
 *.pdf
